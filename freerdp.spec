@@ -1,13 +1,13 @@
 Name: freerdp
 Version: 0.7.2
-Release: alt1
+Release: alt2
 License: GPLv2
 Group: Networking/Remote access
 Summary: Remote Desktop Protocol functionality
 Url: http://freerdp.sourceforge.net/
 Source: http://downloads.sourceforge.net/%name/%name-%version.tar.gz
 
-BuildRequires: openssl-devel libX11-devel libXcursor-devel cups-devel zlib-devel
+BuildRequires: openssl-devel libX11-devel libXcursor-devel cups-devel zlib-devel libalsa-devel
 
 %description
 freerdp implements Remote Desktop Protocol (RDP), used in a number of Microsoft
@@ -82,6 +82,9 @@ rm -f $RPM_BUILD_ROOT%_libdir/{freerdp/,lib}*.{a,la} # FIXME: They shouldn't be 
 %_libdir/pkgconfig/*
 
 %changelog
+* Fri Jul 16 2010 Slava Dubrovskiy <dubrsl@altlinux.org> 0.7.2-alt2
+- Fix undefined symbols
+
 * Fri Jul 16 2010 Slava Dubrovskiy <dubrsl@altlinux.org> 0.7.2-alt1
 - Build for ALT
 
