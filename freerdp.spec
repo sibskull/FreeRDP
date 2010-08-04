@@ -1,13 +1,16 @@
 Name: freerdp
-Version: 0.7.2
-Release: alt2
+Version: 0.7.3
+Release: alt1
 License: GPLv2
 Group: Networking/Remote access
 Summary: Remote Desktop Protocol functionality
+Packager: Slava Dubrovskiy <dubrsl@altlinux.ru>
 Url: http://freerdp.sourceforge.net/
 Source: http://downloads.sourceforge.net/%name/%name-%version.tar.gz
 
-BuildRequires: openssl-devel libX11-devel libXcursor-devel cups-devel zlib-devel libalsa-devel
+BuildRequires: openssl-devel libX11-devel libXcursor-devel cups-devel zlib-devel libalsa-devel libdirectfb-devel libICE-devel libao-devel libsamplerate-devel libpcsclite-devel
+
+Requires: xfreerdp = %version-%release, %name-plugins-standard = %version-%release
 
 %description
 freerdp implements Remote Desktop Protocol (RDP), used in a number of Microsoft
@@ -16,14 +19,27 @@ products.
 %package -n xfreerdp
 Summary: Remote Desktop Protocol client
 Group: Networking/Remote access
-Requires: lib%name = %version-%release, %name-plugins-standard = %version-%release
+
 %description -n xfreerdp
 xfreerdp is a client for Remote Desktop Protocol (RDP), used in a number of
 Microsoft products.
 
+This package contains X11 UI.
+
+%package -n dfbfreerdp
+Summary: Remote Desktop Protocol client
+Group: Networking/Remote access
+
+%description -n dfbfreerdp
+dfbfreerdp is a client for Remote Desktop Protocol (RDP), used in a number of
+Microsoft products.
+
+This package contains  DirectFB UI.
+
 %package -n lib%name
 Summary: Core libraries implementing the RDP protocol
 Group: Networking/Remote access
+
 %description -n lib%name
 libfreerdp can be embedded in applications.
 
@@ -36,6 +52,7 @@ libfreerdp can be extended with plugins handling RDP channels.
 Summary: Plugins for handling the standard RDP channels
 Group: Networking/Remote access
 Requires: lib%name = %version-%release
+
 %description plugins-standard
 A set of plugins to the channel manager implementing the standard virtual
 channels extending RDP core functionality.  For example, sounds, clipboard
@@ -46,6 +63,7 @@ Summary: Libraries and header files for embedding and extending freerdp
 Group: Development/Other
 Requires: lib%name = %version-%release
 Requires: pkgconfig
+
 %description devel
 Header files and unversioned libraries for libfreerdp, libfreerdpchanman and
 libfreerdpkbd.
@@ -56,16 +74,21 @@ echo %version > .tarball-version
 
 %build
 %autoreconf
-%configure --enable-smartcard --with-sound --with-crypto=openssl --with-gnu-ld
+%configure --enable-smartcard --with-sound --with-crypto=openssl --with-gnu-ld --with-dfb
 %make_build
 
 %install
 %makeinstall_std
 rm -f $RPM_BUILD_ROOT%_libdir/{freerdp/,lib}*.{a,la} # FIXME: They shouldn't be installed in the first place
 
+%files
+
 %files -n xfreerdp
 %_bindir/xfreerdp
 %_mandir/*/*
+
+%files -n dfbfreerdp
+%_bindir/dfbfreerdp
 
 %files -n lib%name
 %doc COPYING AUTHORS doc/ipv6.txt doc/ChangeLog
@@ -82,6 +105,9 @@ rm -f $RPM_BUILD_ROOT%_libdir/{freerdp/,lib}*.{a,la} # FIXME: They shouldn't be 
 %_libdir/pkgconfig/*
 
 %changelog
+* Thu Aug 05 2010 Slava Dubrovskiy <dubrsl@altlinux.org> 0.7.3-alt1
+- New version
+
 * Fri Jul 16 2010 Slava Dubrovskiy <dubrsl@altlinux.org> 0.7.2-alt2
 - Fix undefined symbols
 
