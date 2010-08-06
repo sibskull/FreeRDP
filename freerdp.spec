@@ -1,6 +1,6 @@
 Name: freerdp
 Version: 0.7.3
-Release: alt1
+Release: alt2
 License: GPLv2
 Group: Networking/Remote access
 Summary: Remote Desktop Protocol functionality
@@ -10,11 +10,14 @@ Source: http://downloads.sourceforge.net/%name/%name-%version.tar.gz
 
 BuildRequires: openssl-devel libX11-devel libXcursor-devel cups-devel zlib-devel libalsa-devel libdirectfb-devel libICE-devel libao-devel libsamplerate-devel libpcsclite-devel
 
-Requires: xfreerdp = %version-%release, %name-plugins-standard = %version-%release
+Requires: xfreerdp = %version-%release %name-plugins-standard = %version-%release
 
 %description
 freerdp implements Remote Desktop Protocol (RDP), used in a number of Microsoft
 products.
+
+This is metapackage.
+
 
 %package -n xfreerdp
 Summary: Remote Desktop Protocol client
@@ -48,6 +51,17 @@ applications together with libfreerdp.
 
 libfreerdp can be extended with plugins handling RDP channels.
 
+%package -n lib%name-devel
+Summary: Libraries and header files for embedding and extending freerdp
+Group: Development/Other
+Requires: lib%name = %version-%release pkgconfig
+Provides: freerdp-devel
+Obsoletes: freerdp-devel
+
+%description -n lib%name-devel
+Header files and unversioned libraries for libfreerdp, libfreerdpchanman and
+libfreerdpkbd.
+
 %package plugins-standard
 Summary: Plugins for handling the standard RDP channels
 Group: Networking/Remote access
@@ -57,16 +71,6 @@ Requires: lib%name = %version-%release
 A set of plugins to the channel manager implementing the standard virtual
 channels extending RDP core functionality.  For example, sounds, clipboard
 sync, disk/printer redirection, etc.
-
-%package devel
-Summary: Libraries and header files for embedding and extending freerdp
-Group: Development/Other
-Requires: lib%name = %version-%release
-Requires: pkgconfig
-
-%description devel
-Header files and unversioned libraries for libfreerdp, libfreerdpchanman and
-libfreerdpkbd.
 
 %prep
 %setup -q
@@ -99,12 +103,15 @@ rm -f $RPM_BUILD_ROOT%_libdir/{freerdp/,lib}*.{a,la} # FIXME: They shouldn't be 
 %files plugins-standard
 %_libdir/freerdp/*.so
 
-%files devel
+%files -n lib%name-devel
 %_includedir/freerdp/
 %_libdir/lib*.so
 %_libdir/pkgconfig/*
 
 %changelog
+* Fri Aug 06 2010 Slava Dubrovskiy <dubrsl@altlinux.org> 0.7.3-alt2
+- Rename subpackage freerdp-devel -> libfreerdp-devel
+
 * Thu Aug 05 2010 Slava Dubrovskiy <dubrsl@altlinux.org> 0.7.3-alt1
 - New version
 
