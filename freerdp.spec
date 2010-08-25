@@ -1,6 +1,6 @@
 Name: freerdp
-Version: 0.7.3
-Release: alt2
+Version: 0.7.4
+Release: alt1
 License: GPLv2
 Group: Networking/Remote access
 Summary: Remote Desktop Protocol functionality
@@ -109,6 +109,9 @@ rm -f $RPM_BUILD_ROOT%_libdir/{freerdp/,lib}*.{a,la} # FIXME: They shouldn't be 
 %_libdir/pkgconfig/*
 
 %changelog
+* Wed Aug 25 2010 Mykola Grechukh <gns@altlinux.ru> 0.7.4-alt1
+- new version
+
 * Fri Aug 06 2010 Slava Dubrovskiy <dubrsl@altlinux.org> 0.7.3-alt2
 - Rename subpackage freerdp-devel -> libfreerdp-devel
 
