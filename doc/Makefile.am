@@ -5,7 +5,6 @@ EXTRA_DIST = \
 	diagrams \
 	ChangeLog \
 	Doxyfile \
-	freerdp_software_design.lyx \
 	ipv6.txt \
 	licensing.txt \
 	ntlmssp.txt \

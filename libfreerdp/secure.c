@@ -35,6 +35,18 @@
 #include "credssp.h"
 #endif
 
+RD_BOOL
+sec_global_init(void)
+{
+	return crypto_global_init();
+}
+
+void
+sec_global_finish(void)
+{
+	crypto_global_finish();
+}
+
 /* these are read only */
 static uint8 pad_54[40] = {
 	54, 54, 54, 54, 54, 54, 54, 54,
@@ -63,24 +75,24 @@ sec_hash_48(uint8 * out, uint8 * in, uint8 * salt1, uint8 * salt2, uint8 salt)
 	int i;
 	uint8 pad[4];
 	uint8 shasig[20];
-	CRYPTO_MD5 md5;
-	CRYPTO_SHA1 sha1;
+	CryptoMd5 md5;
+	CryptoSha1 sha1;
 
 	for (i = 0; i < 3; i++)
 	{
 		memset(pad, salt + i, i + 1);
 
-		crypto_sha1_init(&sha1);
-		crypto_sha1_update(&sha1, pad, i + 1);
-		crypto_sha1_update(&sha1, in, 48);
-		crypto_sha1_update(&sha1, salt1, 32);
-		crypto_sha1_update(&sha1, salt2, 32);
-		crypto_sha1_final(&sha1, shasig);
+		sha1 = crypto_sha1_init();
+		crypto_sha1_update(sha1, pad, i + 1);
+		crypto_sha1_update(sha1, in, 48);
+		crypto_sha1_update(sha1, salt1, 32);
+		crypto_sha1_update(sha1, salt2, 32);
+		crypto_sha1_final(sha1, shasig);
 
-		crypto_md5_init(&md5);
-		crypto_md5_update(&md5, in, 48);
-		crypto_md5_update(&md5, shasig, 20);
-		crypto_md5_final(&md5, &out[i * 16]);
+		md5 = crypto_md5_init();
+		crypto_md5_update(md5, in, 48);
+		crypto_md5_update(md5, shasig, 20);
+		crypto_md5_final(md5, &out[i * 16]);
 	}
 }
 
@@ -90,13 +102,11 @@ sec_hash_48(uint8 * out, uint8 * in, uint8 * salt1, uint8 * salt2, uint8 salt)
 void
 sec_hash_16(uint8 * out, uint8 * in, uint8 * salt1, uint8 * salt2)
 {
-	CRYPTO_MD5 md5;
-
-	crypto_md5_init(&md5);
-	crypto_md5_update(&md5, in, 16);
-	crypto_md5_update(&md5, salt1, 32);
-	crypto_md5_update(&md5, salt2, 32);
-	crypto_md5_final(&md5, out);
+	CryptoMd5 md5 = crypto_md5_init();
+	crypto_md5_update(md5, in, 16);
+	crypto_md5_update(md5, salt1, 32);
+	crypto_md5_update(md5, salt2, 32);
+	crypto_md5_final(md5, out);
 }
 
 /* Reduce key entropy from 64 to 40 bits */
@@ -150,8 +160,8 @@ sec_generate_keys(rdpSec * sec, uint8 * client_random, uint8 * server_random, in
 	memcpy(sec->sec_encrypt_update_key, sec->sec_encrypt_key, 16);
 
 	/* Initialise RC4 state arrays */
-	crypto_rc4_set_key((CRYPTO_RC4*)&(sec->rc4_decrypt_key), sec->sec_decrypt_key, sec->rc4_key_len);
-	crypto_rc4_set_key((CRYPTO_RC4*)&(sec->rc4_encrypt_key), sec->sec_encrypt_key, sec->rc4_key_len);
+	sec->rc4_decrypt_key = crypto_rc4_init(sec->sec_decrypt_key, sec->rc4_key_len);
+	sec->rc4_encrypt_key = crypto_rc4_init(sec->sec_encrypt_key, sec->rc4_key_len);
 }
 
 /* Output a uint32 into a buffer (little-endian) */
@@ -171,23 +181,23 @@ sec_sign(uint8 * signature, int siglen, uint8 * session_key, int keylen, uint8 *
 	uint8 shasig[20];
 	uint8 md5sig[16];
 	uint8 lenhdr[4];
-	CRYPTO_SHA1 sha1;
-	CRYPTO_MD5 md5;
+	CryptoSha1 sha1;
+	CryptoMd5 md5;
 
 	buf_out_uint32(lenhdr, datalen);
 
-	crypto_sha1_init(&sha1);
-	crypto_sha1_update(&sha1, session_key, keylen);
-	crypto_sha1_update(&sha1, pad_54, 40);
-	crypto_sha1_update(&sha1, lenhdr, 4);
-	crypto_sha1_update(&sha1, data, datalen);
-	crypto_sha1_final(&sha1, shasig);
+	sha1 = crypto_sha1_init();
+	crypto_sha1_update(sha1, session_key, keylen);
+	crypto_sha1_update(sha1, pad_54, 40);
+	crypto_sha1_update(sha1, lenhdr, 4);
+	crypto_sha1_update(sha1, data, datalen);
+	crypto_sha1_final(sha1, shasig);
 
-	crypto_md5_init(&md5);
-	crypto_md5_update(&md5, session_key, keylen);
-	crypto_md5_update(&md5, pad_92, 48);
-	crypto_md5_update(&md5, shasig, 20);
-	crypto_md5_final(&md5, md5sig);
+	md5 = crypto_md5_init();
+	crypto_md5_update(md5, session_key, keylen);
+	crypto_md5_update(md5, pad_92, 48);
+	crypto_md5_update(md5, shasig, 20);
+	crypto_md5_final(md5, md5sig);
 
 	memcpy(signature, md5sig, siglen);
 }
@@ -197,24 +207,25 @@ static void
 sec_update(rdpSec * sec, uint8 * key, uint8 * update_key)
 {
 	uint8 shasig[20];
-	CRYPTO_SHA1 sha1;
-	CRYPTO_MD5 md5;
-	CRYPTO_RC4 update;
+	CryptoSha1 sha1;
+	CryptoMd5 md5;
+	CryptoRc4 update;
 
-	crypto_sha1_init(&sha1);
-	crypto_sha1_update(&sha1, update_key, sec->rc4_key_len);
-	crypto_sha1_update(&sha1, pad_54, 40);
-	crypto_sha1_update(&sha1, key, sec->rc4_key_len);
-	crypto_sha1_final(&sha1, shasig);
+	sha1 = crypto_sha1_init();
+	crypto_sha1_update(sha1, update_key, sec->rc4_key_len);
+	crypto_sha1_update(sha1, pad_54, 40);
+	crypto_sha1_update(sha1, key, sec->rc4_key_len);
+	crypto_sha1_final(sha1, shasig);
 
-	crypto_md5_init(&md5);
-	crypto_md5_update(&md5, update_key, sec->rc4_key_len);
-	crypto_md5_update(&md5, pad_92, 48);
-	crypto_md5_update(&md5, shasig, 20);
-	crypto_md5_final(&md5, key);
+	md5 = crypto_md5_init();
+	crypto_md5_update(md5, update_key, sec->rc4_key_len);
+	crypto_md5_update(md5, pad_92, 48);
+	crypto_md5_update(md5, shasig, 20);
+	crypto_md5_final(md5, key);
 
-	crypto_rc4_set_key(&update, key, sec->rc4_key_len);
-	crypto_rc4(&update, sec->rc4_key_len, key, key);
+	update = crypto_rc4_init(key, sec->rc4_key_len);
+	crypto_rc4(update, sec->rc4_key_len, key, key);
+	crypto_rc4_free(update);
 
 	if (sec->rc4_key_len == 8)
 		sec_make_40bit(key);
@@ -227,11 +238,12 @@ sec_encrypt(rdpSec * sec, uint8 * data, int length)
 	if (sec->sec_encrypt_use_count == 4096)
 	{
 		sec_update(sec, sec->sec_encrypt_key, sec->sec_encrypt_update_key);
-		crypto_rc4_set_key((CRYPTO_RC4*)&(sec->rc4_encrypt_key), sec->sec_encrypt_key, sec->rc4_key_len);
+		crypto_rc4_free(sec->rc4_encrypt_key);
+		sec->rc4_encrypt_key = crypto_rc4_init(sec->sec_encrypt_key, sec->rc4_key_len);
 		sec->sec_encrypt_use_count = 0;
 	}
 
-	crypto_rc4((CRYPTO_RC4*)&(sec->rc4_encrypt_key), length, data, data);
+	crypto_rc4(sec->rc4_encrypt_key, length, data, data);
 	sec->sec_encrypt_use_count++;
 }
 
@@ -239,23 +251,21 @@ sec_encrypt(rdpSec * sec, uint8 * data, int length)
 static void
 sec_decrypt(rdpSec * sec, uint8 * data, int length)
 {
+#ifndef DISABLE_TLS
+	if (sec->tls_connected)
+		return;
+#endif
+
 	if (sec->sec_decrypt_use_count == 4096)
 	{
 		sec_update(sec, sec->sec_decrypt_key, sec->sec_decrypt_update_key);
-		crypto_rc4_set_key((CRYPTO_RC4*)&(sec->rc4_decrypt_key), sec->sec_decrypt_key, sec->rc4_key_len);
+		crypto_rc4_free(sec->rc4_decrypt_key);
+		sec->rc4_decrypt_key = crypto_rc4_init(sec->sec_decrypt_key, sec->rc4_key_len);
 		sec->sec_decrypt_use_count = 0;
 	}
 
-	crypto_rc4((CRYPTO_RC4*)&(sec->rc4_decrypt_key), length, data, data);
+	crypto_rc4(sec->rc4_decrypt_key, length, data, data);
 	sec->sec_decrypt_use_count++;
-}
-
-/* Perform an RSA public key encryption operation */
-static void
-sec_rsa_encrypt(uint8 * out, uint8 * in, int len, uint32 modulus_size, uint8 * modulus,
-		uint8 * exponent)
-{
-	crypto_rsa_encrypt(len, in, out, modulus_size, modulus, exponent);
 }
 
 /* Initialise secure transport packet */
@@ -265,10 +275,15 @@ sec_init(rdpSec * sec, uint32 flags, int maxlen)
 	STREAM s;
 	int hdrlen;
 
-	if (!(sec->licence->licence_issued))
-		hdrlen = (flags & SEC_ENCRYPT) ? 12 : 4;
+	if (flags)
+	{
+		if (!(sec->licence->licence_issued))
+			hdrlen = (flags & SEC_ENCRYPT) ? 12 : 4;
+		else
+			hdrlen = (flags & SEC_ENCRYPT) ? 12 : 0;
+	}
 	else
-		hdrlen = (flags & SEC_ENCRYPT) ? 12 : 0;
+		hdrlen = 0;
 
 	s = mcs_init(sec->mcs, maxlen + hdrlen);
 	s_push_layer(s, sec_hdr, hdrlen);
@@ -295,24 +310,27 @@ void
 sec_send_to_channel(rdpSec * sec, STREAM s, uint32 flags, uint16 channel)
 {
 	int datalen;
-
 	s_pop_layer(s, sec_hdr);
 
-	if (!(sec->licence->licence_issued) || (flags & SEC_ENCRYPT))
-		out_uint32_le(s, flags);
-
-	if (flags & SEC_ENCRYPT)
+	if (flags)
 	{
-		flags &= ~SEC_ENCRYPT;
-		datalen = s->end - s->p - 8;
+		/* Basic Security Header */
+		if (!(sec->licence->licence_issued) || (flags & SEC_ENCRYPT))
+			out_uint32_le(s, flags); /* flags */
+
+		if (flags & SEC_ENCRYPT)
+		{
+			flags &= ~SEC_ENCRYPT;
+			datalen = s->end - s->p - 8;
 
 #if WITH_DEBUG
-		DEBUG("Sending encrypted packet:\n");
-		hexdump(s->p + 8, datalen);
+			DEBUG("Sending encrypted packet:\n");
+			hexdump(s->p + 8, datalen);
 #endif
 
-		sec_sign(s->p, 8, sec->sec_sign_key, sec->rc4_key_len, s->p + 8, datalen);
-		sec_encrypt(sec, s->p + 8, datalen);
+			sec_sign(s->p, 8, sec->sec_sign_key, sec->rc4_key_len, s->p + 8, datalen);
+			sec_encrypt(sec, s->p + 8, datalen);
+		}
 	}
 
 	mcs_send_to_channel(sec->mcs, s, channel);
@@ -331,7 +349,6 @@ void
 sec_fp_send(rdpSec * sec, STREAM s, uint32 flags)
 {
 	int datalen;
-
 	s_pop_layer(s, sec_hdr);
 	if (flags & SEC_ENCRYPT)
 	{
@@ -360,49 +377,25 @@ sec_establish_key(rdpSec * sec)
 	sec_send(sec, s, flags);
 }
 
-/* Prepare PER encoded T.125 ConnectData for ConferenceCreateRequest connect-initial */
 static void
-sec_out_connectdata(rdpSec * sec, STREAM s)
+sec_out_client_core_data(rdpSec * sec, rdpSet * settings, STREAM s)
 {
-	int i;
-	rdpSet * settings = sec->rdp->settings;
-	int length = 158 + 76 + 12 + 4;
 	char * p;
 	size_t len;
-
-	if (settings->num_channels > 0)
-		length += settings->num_channels * 12 + 8;
-
-	/* t124Identifier = 0.0.20.124.0.1 */
-	out_uint16_be(s, 5);
-	out_uint16_be(s, 0x14);
-	out_uint8(s, 0x7c);
-	out_uint16_be(s, 1);
-	/* connectPDU octet string */
-	out_uint16_be(s, (length | 0x8000));	/* connectPDU length in two bytes*/
-	/* connectPDU content is ConnectGCCPDU PER encoded: */
-	out_uint16_be(s, 8);	/* ConferenceCreateRequest ... */
-	out_uint16_be(s, 16);
-	out_uint8(s, 0);
-	out_uint16_le(s, 0xc001);	/* userData key is h221NonStandard */
-	out_uint8(s, 0);	/* 4 bytes: */
-	out_uint32_le(s, 0x61637544);	/* "Duca" */
-	out_uint16_be(s, ((length - 14) | 0x8000));	/* userData value length in two bytes */
-
-	/*
-	 * Client Core Data (216 bytes plus optional connectionType, pad1octet and serverSelectedProtocol)
-	 */
+	uint16 highColorDepth;
+	uint16 supportedColorDepths;
+	uint16 earlyCapabilityFlags;
 
 	out_uint16_le(s, UDH_CS_CORE);	/* User Data Header type */
-	out_uint16_le(s, 212);	/* total length */
+	out_uint16_le(s, 216);		/* total length */
 
 	out_uint32_le(s, settings->rdp_version >= 5 ? 0x00080004 : 0x00080001);	/* client version */
-	out_uint16_le(s, settings->width);	// desktopWidth
-	out_uint16_le(s, settings->height);	// desktopHeight
-	out_uint16_le(s, RNS_UD_COLOR_8BPP);	// colorDepth - ignored because of postBeta2ColorDepth
-	out_uint16_le(s, RNS_UD_SAS_DEL); // SASSequence (Secure Access Sequence)
-	out_uint32_le(s, settings->keyboard_layout); // keyboardLayout
-	out_uint32_le(s, 2600);	// clientBuild
+	out_uint16_le(s, settings->width);		/* desktopWidth */
+	out_uint16_le(s, settings->height);		/* desktopHeight */
+	out_uint16_le(s, RNS_UD_COLOR_8BPP);		/* colorDepth, ignored because of postBeta2ColorDepth */
+	out_uint16_le(s, RNS_UD_SAS_DEL);		/* SASSequence (Secure Access Sequence) */
+	out_uint32_le(s, settings->keyboard_layout);	/* keyboardLayout */
+	out_uint32_le(s, 2600);				/* clientBuild */
 
 	/* Unicode name of client, truncated to 15 characters */
 	p = xstrdup_out_unistr(sec->rdp, settings->hostname, &len);
@@ -416,52 +409,56 @@ sec_out_connectdata(rdpSec * sec, STREAM s)
 	out_uint8s(s, 32 - len - 2);
 	xfree(p);
 
-	out_uint32_le(s, settings->keyboard_type);	/* keyboardType */
-	out_uint32_le(s, settings->keyboard_subtype);	/* keyboardSubType */
+	out_uint32_le(s, settings->keyboard_type);		/* keyboardType */
+	out_uint32_le(s, settings->keyboard_subtype);		/* keyboardSubType */
 	out_uint32_le(s, settings->keyboard_functionkeys);	/* keyboardFunctionKey */
 
 	/* Input Method Editor (IME) file name associated with the input locale.
 	   Up to 31 Unicode characters plus a NULL terminator */
-	// FIXME:
+	/* FIXME: populate this field with real data */
 	out_uint8s(s, 64);	/* imeFileName */
 
-	out_uint16_le(s, RNS_UD_COLOR_8BPP); // postBeta2ColorDepth
-	out_uint16_le(s, 1); // clientProductID
-	out_uint32_le(s, 0); // serialNumber (should be initialized to 0)
+	out_uint16_le(s, RNS_UD_COLOR_8BPP); /* postBeta2ColorDepth */
+	out_uint16_le(s, 1); /* clientProductID */
+	out_uint32_le(s, 0); /* serialNumber (should be initialized to 0) */
 
-	i = MIN(settings->server_depth, 24);	/* 32 must be reported as 24 and RNS_UD_CS_WANT_32BPP_SESSION */
-	out_uint16_le(s, i); // (requested) highColorDepth
+	highColorDepth = MIN(settings->server_depth, 24);	/* 32 must be reported as 24 and RNS_UD_CS_WANT_32BPP_SESSION */
+	out_uint16_le(s, highColorDepth); /* (requested) highColorDepth */
 
-	i = RNS_UD_32BPP_SUPPORT | RNS_UD_24BPP_SUPPORT | RNS_UD_16BPP_SUPPORT | RNS_UD_15BPP_SUPPORT;
-	out_uint16_le(s, i); // supportedColorDepths
+	supportedColorDepths = RNS_UD_32BPP_SUPPORT | RNS_UD_24BPP_SUPPORT | RNS_UD_16BPP_SUPPORT | RNS_UD_15BPP_SUPPORT;
+	out_uint16_le(s, supportedColorDepths); /* supportedColorDepths */
 
-	i = RNS_UD_CS_SUPPORT_ERRINFO_PDU;
+	earlyCapabilityFlags = RNS_UD_CS_SUPPORT_ERRINFO_PDU;
+
 	if (settings->server_depth == 32)
-	{
-		i |= RNS_UD_CS_WANT_32BPP_SESSION;
-	}
-	out_uint32_le(s, i); // earlyCapabilityFlags
+		earlyCapabilityFlags |= RNS_UD_CS_WANT_32BPP_SESSION;
 
-	out_uint8s(s, 64); // clientDigProductId (64 bytes)
+	out_uint16_le(s, earlyCapabilityFlags); /* earlyCapabilityFlags */
+	out_uint8s(s, 64); /* clientDigProductId (64 bytes) */
+	out_uint8(s, 0); /* connectionType, only valid when RNS_UD_CS_VALID_CONNECTION_TYPE is set in earlyCapabilityFlags */
+	out_uint8(s, 0); /* pad1octet */
+	out_uint32_le(s, sec->negotiated_protocol); /* serverSelectedProtocol */
+}
 
-	/* Optional fields left out:
-	   connectionType (1 byte) and pad1octet (1 byte) (because no earlyCapabilityFlags RNS_UD_CS_VALID_CONNECTION_TYPE)
-	   serverSelectedProtocol (4 bytes) (default 0 = PROTOCOL_RDP)
-	*/
-
-	/*
-	 * Client Security Data (12 bytes)
-	 */
+static void
+sec_out_client_security_data(rdpSec * sec, rdpSet * settings, STREAM s)
+{
+	uint16 encryptionMethods = 0;
 
 	out_uint16_le(s, UDH_CS_SECURITY);	/* User Data Header type */
-	out_uint16_le(s, 12);	/* total length */
+	out_uint16_le(s, 12);			/* total length */
 
-	out_uint32_le(s, settings->encryption ? ENCRYPTION_40BIT_FLAG | ENCRYPTION_128BIT_FLAG : 0); // encryptionMethods
-	out_uint32_le(s, 0); // extEncryptionMethods
+	if (settings->encryption || sec->tls_connected)
+		encryptionMethods = ENCRYPTION_40BIT_FLAG | ENCRYPTION_128BIT_FLAG;
 
-	/*
-	 * Client Network Data (optional and variable-length)
-	 */
+	out_uint32_le(s, encryptionMethods);	/* encryptionMethods */
+	out_uint32_le(s, 0);			/* extEncryptionMethods */
+}
+
+static void
+sec_out_client_network_data(rdpSec * sec, rdpSet * settings, STREAM s)
+{
+	int i;
 
 	DEBUG_RDP5("num_channels is %d\n", settings->num_channels);
 	if (settings->num_channels > 0)
@@ -469,34 +466,85 @@ sec_out_connectdata(rdpSec * sec, STREAM s)
 		out_uint16_le(s, UDH_CS_NET);	/* User Data Header type */
 		out_uint16_le(s, settings->num_channels * 12 + 8);	/* total length */
 
-		out_uint32_le(s, settings->num_channels);	// channelCount
+		out_uint32_le(s, settings->num_channels);	/* channelCount */
 		for (i = 0; i < settings->num_channels; i++)
 		{
 			DEBUG_RDP5("Requesting channel %s\n", settings->channels[i].name);
-			out_uint8a(s, settings->channels[i].name, 8); // name (8 bytes) 7 characters with null terminator
-			out_uint32_be(s, settings->channels[i].flags); // options (4 bytes)
+			out_uint8a(s, settings->channels[i].name, 8); /* name (8 bytes) 7 characters with null terminator */
+			out_uint32_le(s, settings->channels[i].flags); /* options (4 bytes) */
 		}
 	}
+}
 
-	/*
-	 * Client Cluster Data (12 bytes)
-	 */
-
+static void
+sec_out_client_cluster_data(rdpSec * sec, rdpSet * settings, STREAM s)
+{
 	out_uint16_le(s, UDH_CS_CLUSTER);	/* User Data Header type */
-	out_uint16_le(s, 12);	/* total length */
+	out_uint16_le(s, 12);			/* total length */
+
 	out_uint32_le(s, (settings->console_session || sec->rdp->redirect_session_id) ?
 		REDIRECTED_SESSIONID_FIELD_VALID | REDIRECTION_SUPPORTED | REDIRECTION_VERSION4 :
-		REDIRECTION_SUPPORTED | REDIRECTION_VERSION4); // flags
-	out_uint32_le(s, sec->rdp->redirect_session_id); // RedirectedSessionID
+		REDIRECTION_SUPPORTED | REDIRECTION_VERSION4); /* flags */
+
+	out_uint32_le(s, sec->rdp->redirect_session_id); /* RedirectedSessionID */
+}
+
+void
+sec_out_gcc_conference_create_request(rdpSec * sec, STREAM s)
+{
+	int length;
+	rdpSet * settings = sec->rdp->settings;
+
+	/* See ITU-T Rec. T.124 (02/98) Generic Conference Control */
+
+	/* the part before userData is of a fixed size, making things convenient */
+	s->p = s->data + 23;
+	sec_out_client_core_data(sec, settings, s);
+	sec_out_client_cluster_data(sec, settings, s);
+	sec_out_client_security_data(sec, settings, s);
+	sec_out_client_network_data(sec, settings, s);
+	length = (s->p - s->data) - 23;
+	s->p = s->data;
+
+	/* t124Identifier = 0.0.20.124.0.1 */
+	out_uint16_be(s, 5);
+	out_uint16_be(s, 0x14);
+	out_uint8(s, 0x7c);
+	out_uint16_be(s, 1);
+
+	/* connectPDU octet string */
+	out_uint16_be(s, ((length + 14) | 0x8000));		/* connectPDU length in two bytes*/
+
+	/* connectPDU content is ConnectGCCPDU PER encoded: */
+	out_uint16_be(s, 8);				/* ConferenceCreateRequest ... */
+	out_uint16_be(s, 16);
+	out_uint8(s, 0);
+	out_uint16_le(s, 0xC001);			/* userData key is h221NonStandard */
+	out_uint8(s, 0);				/* 4 bytes: */
+	out_uint32_le(s, 0x61637544);			/* "Duca" */
+	out_uint16_be(s, (length | 0x8000));		/* userData value length in two bytes */
+	s->p = s->data + length + 23;			/* userData (outputted earlier) */
 
 	s_mark_end(s);
+}
+
+static void
+revcpy(uint8 * out, uint8 * in, int len)
+{
+	int i;
+	in += len;
+	for (i = 0; i < len; i++)
+	{
+		*out++ = *--in;
+	}
 }
 
 /* Parse a Server Proprietary Certificate RSA Public Key */
 static RD_BOOL
 sec_parse_public_key(rdpSec * sec, STREAM s, uint32 len, uint8 * modulus, uint8 * exponent)
 {
-	uint32 magic, modulus_len;
+	uint32 magic;
+	uint32 modulus_len;
 
 	in_uint32_le(s, magic);
 	if (magic != SEC_RSA_MAGIC)
@@ -520,8 +568,10 @@ sec_parse_public_key(rdpSec * sec, STREAM s, uint32 len, uint8 * modulus, uint8 
 
 	in_uint8s(s, 4);	/* modulus_bits - must match modulus_len */
 	in_uint8s(s, 4);	/* datalen - how much data can be encoded */
-	in_uint8a(s, exponent, SEC_EXPONENT_SIZE);
-	in_uint8a(s, modulus, modulus_len);
+	revcpy(exponent, s->p, SEC_EXPONENT_SIZE);
+	in_uint8s(s, SEC_EXPONENT_SIZE);
+	revcpy(modulus, s->p, modulus_len);
+	in_uint8s(s, modulus_len);
 	in_uint8s(s, SEC_PADDING_SIZE);	/* zero padding - included in modulus_len but not in modulus_bits */
 	sec->server_public_key_len = modulus_len;
 
@@ -536,7 +586,6 @@ sec_parse_public_sig(STREAM s, uint32 len)
 	 * That is completely nonsense, so we won't bother checking it. */
 
 	in_uint8s(s, len);
-
 	return len == 72;
 }
 
@@ -544,12 +593,15 @@ sec_parse_public_sig(STREAM s, uint32 len)
 static RD_BOOL
 sec_parse_server_security_data(rdpSec * sec, STREAM s, uint32 * encryptionMethod, uint8 server_random[SEC_RANDOM_SIZE], uint8 * modulus, uint8 * exponent)
 {
-	uint32 encryptionLevel, serverRandomLen, serverCertLen;
-	uint32 dwVersion, certChainVersion;
+	uint32 encryptionLevel;
+	uint32 serverRandomLen;
+	uint32 serverCertLen;
+	uint32 certChainVersion;
+	uint32 dwVersion;
 
 	in_uint32_le(s, *encryptionMethod);	/* 1 = 40-bit, 2 = 128-bit, 0 for TLS/CredSSP */
 	in_uint32_le(s, encryptionLevel);	/* 1 = low, 2 = client compatible, 3 = high */
-	if (encryptionLevel == 0)	/* no encryption */
+	if (encryptionLevel == 0)		/* no encryption */
 		return False;
 	in_uint32_le(s, serverRandomLen);
 	in_uint32_le(s, serverCertLen);
@@ -564,7 +616,7 @@ sec_parse_server_security_data(rdpSec * sec, STREAM s, uint32 * encryptionMethod
 
 	/* Server Certificate: */
 	in_uint32_le(s, dwVersion); /* bit 0x80000000 = temporary certificate */
-	certChainVersion = dwVersion & 0x7fffffff;
+	certChainVersion = dwVersion & 0x7FFFFFFF;
 
 	if (certChainVersion == 1)	 /* Server Proprietary Certificate */
 	{
@@ -596,8 +648,7 @@ sec_parse_server_security_data(rdpSec * sec, STREAM s, uint32 * encryptionMethod
 	{
 		uint32 cert_total_count, cert_counter;
 		uint32 license_cert_len, ts_cert_len;
-		CRYPTO_CERT *license_cert, *ts_cert;
-		CRYPTO_PUBLIC_KEY *server_public_key;
+		CryptoCert license_cert, ts_cert;
 
 		DEBUG_RDP5("We're going for a X.509 Certificate (TS license)\n");
 		in_uint32_le(s, cert_total_count);	/* Number of certificates */
@@ -612,7 +663,7 @@ sec_parse_server_security_data(rdpSec * sec, STREAM s, uint32 * encryptionMethod
 		for (cert_counter=0; cert_counter < cert_total_count - 2; cert_counter++)
 		{
 			uint32 ignorelen;
-			CRYPTO_CERT *ignorecert;
+			CryptoCert ignorecert;
 
 			DEBUG_RDP5("Ignoring cert: %d\n", cert_counter);
 			in_uint32_le(s, ignorelen);
@@ -668,10 +719,10 @@ sec_parse_server_security_data(rdpSec * sec, STREAM s, uint32 * encryptionMethod
 		}
 		crypto_cert_free(license_cert);
 
-		server_public_key = crypto_cert_get_public_key(ts_cert, &(sec->server_public_key_len));
-		if (NULL == server_public_key)
+		if (crypto_cert_get_pub_exp_mod(ts_cert, &(sec->server_public_key_len),
+				exponent, SEC_EXPONENT_SIZE, modulus, SEC_MAX_MODULUS_SIZE) != 0)
 		{
-			DEBUG_RDP5("Could not read RSA key from TS Certificate\n");
+			ui_error(sec->rdp->inst, "Problem extracting RSA key from TS Certificate\n");
 			crypto_cert_free(ts_cert);
 			return False;
 		}
@@ -681,17 +732,8 @@ sec_parse_server_security_data(rdpSec * sec, STREAM s, uint32 * encryptionMethod
 		{
 			ui_error(sec->rdp->inst, "Bad TS Certificate public key size (%u bits)\n",
 			         sec->server_public_key_len * 8);
-			crypto_public_key_free(server_public_key);
 			return False;
 		}
-		if (crypto_public_key_get_exp_mod(server_public_key, exponent, SEC_EXPONENT_SIZE,
-					 modulus, SEC_MAX_MODULUS_SIZE) != 0)
-		{
-			ui_error(sec->rdp->inst, "Problem extracting RSA exponent, modulus\n");
-			crypto_public_key_free(server_public_key);
-			return False;
-		}
-		crypto_public_key_free(server_public_key);
 		in_uint8s(s, 8 + 4 * cert_total_count); /* Padding */
 	}
 	else
@@ -707,23 +749,32 @@ sec_parse_server_security_data(rdpSec * sec, STREAM s, uint32 * encryptionMethod
 static void
 sec_process_server_security_data(rdpSec * sec, STREAM s)
 {
+	uint32 rc4_key_size;
 	uint8 server_random[SEC_RANDOM_SIZE];
 	uint8 client_random[SEC_RANDOM_SIZE];
 	uint8 modulus[SEC_MAX_MODULUS_SIZE];
 	uint8 exponent[SEC_EXPONENT_SIZE];
-	uint32 rc4_key_size;
+	uint8 client_random_rev[SEC_RANDOM_SIZE];
+	uint8 crypted_random_rev[SEC_MAX_MODULUS_SIZE];
 
 	memset(modulus, 0, sizeof(modulus));
 	memset(exponent, 0, sizeof(exponent));
 	if (!sec_parse_server_security_data(sec, s, &rc4_key_size, server_random, modulus, exponent))
 	{
-		DEBUG("Failed to parse crypt info\n");
+		/* encryptionMethod (rc4_key_size) = 0 means TLS */
+		if (rc4_key_size > 0)
+		{
+			DEBUG("Failed to parse crypt info\n");
+		}
 		return;
 	}
+
 	DEBUG("Generating client random\n");
 	generate_random(client_random);
-	sec_rsa_encrypt(sec->sec_crypted_random, client_random, SEC_RANDOM_SIZE,
+	revcpy(client_random_rev, client_random, SEC_RANDOM_SIZE);
+	crypto_rsa_encrypt(SEC_RANDOM_SIZE, client_random_rev, crypted_random_rev,
 			sec->server_public_key_len, modulus, exponent);
+	revcpy(sec->sec_crypted_random, crypted_random_rev, sec->server_public_key_len);
 	sec_generate_keys(sec, client_random, server_random, rc4_key_size);
 }
 
@@ -744,7 +795,10 @@ sec_process_server_core_data(rdpSec * sec, STREAM s, uint16 length)
 		sec->rdp->settings->rdp_version = 5;	/* FIXME: We can't just upgrade the RDP version! */
 	}
 	else
+	{
 		ui_error(sec->rdp->inst, "Invalid server rdp version %ul\n", server_rdp_version);
+	}
+
 	DEBUG_RDP5("Server RDP version is %d\n", sec->rdp->settings->rdp_version);
 	if (length >= 12)
 	{
@@ -756,24 +810,35 @@ sec_process_server_core_data(rdpSec * sec, STREAM s, uint16 length)
 static void
 sec_process_server_network_data(rdpSec * sec, STREAM s)
 {
-	uint16 io_channel_id, channelCount;
 	int i;
+	uint16 MCSChannelId;
+	uint16 channelCount;
 
-	in_uint16_le(s, io_channel_id);
-	in_uint16_le(s, channelCount);
+	in_uint16_le(s, MCSChannelId); /* MCSChannelId */
+	in_uint16_le(s, channelCount); /* channelCount */
+
 	/* TODO: Check that it matches rdp->settings->num_channels */
+	if (channelCount != sec->rdp->settings->num_channels)
+	{
+		ui_error(sec->rdp->inst, "client requested %d channels, server replied with %d channels",
+		         sec->rdp->settings->num_channels, channelCount);
+	}
 
+	/* channelIdArray */
 	for (i = 0; i < channelCount; i++)
 	{
-		uint16 channel_id;
-		in_uint16_le(s, channel_id);	/* Channel id allocated to requested channel number i */
+		uint16 channelId;
+		in_uint16_le(s, channelId);	/* Channel ID allocated to requested channel number i */
+
 		/* TODO: Assign channel ids here instead of in freerdp.c l_rdp_connect */
-		if (channel_id != sec->rdp->settings->channels[i].chan_id)
+		if (channelId != sec->rdp->settings->channels[i].chan_id)
 		{
-			ui_error(sec->rdp->inst, "channel %d is %d but should have been %d\n", i, channel_id, sec->rdp->settings->channels[i].chan_id);
+			ui_error(sec->rdp->inst, "channel %d is %d but should have been %d\n",
+			         i, channelId, sec->rdp->settings->channels[i].chan_id);
 		}
 	}
-	if (channelCount & 1)
+
+	if (channelCount % 2 == 1)
 		in_uint8s(s, 2);	/* Padding */
 }
 
@@ -781,63 +846,62 @@ sec_process_server_network_data(rdpSec * sec, STREAM s)
 void
 sec_process_mcs_data(rdpSec * sec, STREAM s)
 {
-	uint16 type, length;
+	uint8 byte;
+	uint16 type;
+	uint16 length;
+	uint16 totalLength;
 	uint8 *next_tag;
-	uint8 value_len;
 
 	in_uint8s(s, 21);	/* TODO: T.124 ConferenceCreateResponse userData with key h221NonStandard McDn */
-	in_uint8(s, value_len);
-	if (value_len & 0x80)
-		in_uint8(s, value_len);
 
-	/* Server Core Data structure with User Data Header */
-	in_uint16_le(s, type);
-	in_uint16_le(s, length);
-	next_tag = s->p + length - 4;
-	if (type != UDH_SC_CORE)
-	{
-		ui_error(sec->rdp->inst, "UDH_SC_CORE response tag 0x%x\n", type);
-		return;
-	}
-	sec_process_server_core_data(sec, s, length);
-	if(s->p != next_tag)
-		ui_error(sec->rdp->inst, "Server Core Data length error\n");
+	in_uint8(s, byte);
+	totalLength = (uint16) byte;
 
-	/* Server Network Data structure with User Data Header */
-	in_uint16_le(s, type);
-	in_uint16_le(s, length);
-	next_tag = s->p + length - 4;
-	if (type != UDH_SC_NET)
+	if (byte & 0x80)
 	{
-		ui_error(sec->rdp->inst, "UDH_SC_NET response tag 0x%x\n", type);
-		return;
+		totalLength &= ~0x80;
+		totalLength <<= 8;
+		in_uint8(s, byte);
+		totalLength += (uint16) byte;
 	}
-	sec_process_server_network_data(sec, s);
-	if(s->p != next_tag)
-		ui_error(sec->rdp->inst, "Server Network Data length error\n");
 
-	/* Server Security Data structure with User Data Header */
-	in_uint16_le(s, type);
-	in_uint16_le(s, length);
-	next_tag = s->p + length - 4;
-	if (type != UDH_SC_SECURITY)
+	while (s->p < s->end)
 	{
-		ui_error(sec->rdp->inst, "UDH_SC_SECURITY response tag 0x%x\n", type);
-		return;
+		in_uint16_le(s, type);
+		in_uint16_le(s, length);
+
+		if (length <= 4)
+			return;
+
+		next_tag = s->p + length - 4;
+
+		switch (type)
+		{
+			case UDH_SC_CORE: /* Server Core Data */
+				sec_process_server_core_data(sec, s, length);
+				break;
+
+			case UDH_SC_NET: /* Server Network Data */
+				sec_process_server_network_data(sec, s);
+				break;
+
+			case UDH_SC_SECURITY: /* Server Security Data */
+				sec_process_server_security_data(sec, s);
+				break;
+		}
+
+		s->p = next_tag;
 	}
-	sec_process_server_security_data(sec, s);
-	if(s->p != next_tag)
-		ui_error(sec->rdp->inst, "Server Security Data length error\n");
 }
 
 /* Receive secure transport packet */
 STREAM
 sec_recv(rdpSec * sec, secRecvType * type)
 {
-	isoRecvType iso_type;
-	uint32 sec_flags;
-	uint16 channel;
 	STREAM s;
+	uint16 channel;
+	uint32 sec_flags;
+	isoRecvType iso_type;
 
 	while ((s = mcs_recv(sec->mcs, &channel, &iso_type)) != NULL)
 	{
@@ -852,7 +916,7 @@ sec_recv(rdpSec * sec, secRecvType * type)
 			}
 			return s;
 		}
-		if (sec->rdp->settings->encryption || !(sec->licence->licence_issued))
+		if (sec->rdp->settings->encryption || (!(sec->licence->licence_issued) && !(sec->tls_connected)))
 		{
 			/* basicSecurityHeader: */
 			in_uint32_le(s, sec_flags);
@@ -895,7 +959,11 @@ RD_BOOL
 sec_connect(rdpSec * sec, char *server, char *username, int port)
 {
 	/* Don't forget to set this *before* iso_connect(), otherwise you'll bang your head on the wall */
-	sec->requested_protocol = PROTOCOL_RDP;
+
+	if (sec->rdp->settings->tls)
+		sec->requested_protocol = PROTOCOL_TLS;
+	else
+		sec->requested_protocol = PROTOCOL_RDP;
 
 	if (!iso_connect(sec->mcs->iso, server, username, port))
 		return False;
@@ -904,7 +972,7 @@ sec_connect(rdpSec * sec, char *server, char *username, int port)
 	if(sec->negotiated_protocol == PROTOCOL_NLA)
 	{
 		/* TLS with NLA was successfully negotiated */
-		printf("PROTOCOL_NLA negotiated\n");
+		printf("TLS encryption with NLA negotiated\n");
 		sec->ctx = tls_create_context();
 		sec->ssl = tls_connect(sec->ctx, sec->mcs->iso->tcp->sock, server);
 		sec->tls_connected = 1;
@@ -916,31 +984,26 @@ sec_connect(rdpSec * sec, char *server, char *username, int port)
 	{
 		/* TLS without NLA was successfully negotiated */
 		RD_BOOL success;
-		struct stream connectdata;
-		printf("PROTOCOL_TLS negotiated\n");
+		printf("TLS Encryption negotiated\n");
 		sec->ctx = tls_create_context();
 		sec->ssl = tls_connect(sec->ctx, sec->mcs->iso->tcp->sock, server);
 		sec->tls_connected = 1;
-
-		/* We exchange some RDP data during the MCS-Connect */
-		connectdata.size = 512;
-		connectdata.p = connectdata.data = (uint8 *) xmalloc(connectdata.size);
-		sec_out_connectdata(sec, &connectdata);
-		success = mcs_connect(sec->mcs, &connectdata);
-		xfree(connectdata.data);
+		sec->rdp->settings->encryption = 0;
+		success = mcs_connect(sec->mcs);
+		return success;
 	}
 	else
 #endif
 	{
 		RD_BOOL success;
-		struct stream connectdata;
-		printf("PROTOCOL_RDP negotiated\n");
-		/* We exchange some RDP data during the MCS-Connect */
-		connectdata.size = 512;
-		connectdata.p = connectdata.data = (uint8 *) xmalloc(connectdata.size);
-		sec_out_connectdata(sec, &connectdata);
-		success = mcs_connect(sec->mcs, &connectdata);
-		xfree(connectdata.data);
+
+		if (sec->requested_protocol > PROTOCOL_RDP)
+		{
+			/* only tell about the legacy RDP negotiation success when it wasn't the requested encryption */
+			printf("Legacy RDP encryption negotiated\n");
+		}
+
+		success = mcs_connect(sec->mcs);
 
 		if (success && sec->rdp->settings->encryption)
 			sec_establish_key(sec);
@@ -956,6 +1019,13 @@ void
 sec_disconnect(rdpSec * sec)
 {
 	mcs_disconnect(sec->mcs);
+
+	if (sec->rc4_decrypt_key)
+		crypto_rc4_free(sec->rc4_decrypt_key);
+	sec->rc4_decrypt_key = NULL;
+	if (sec->rc4_encrypt_key)
+		crypto_rc4_free(sec->rc4_encrypt_key);
+	sec->rc4_encrypt_key = NULL;
 }
 
 rdpSec *
@@ -975,6 +1045,8 @@ sec_new(struct rdp_rdp * rdp)
 		self->nla = nla_new(self);
 #endif
 
+		self->rc4_decrypt_key = NULL;
+		self->rc4_encrypt_key = NULL;
 	}
 	return self;
 }

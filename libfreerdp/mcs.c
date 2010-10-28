@@ -59,11 +59,18 @@ mcs_parse_domain_params(rdpMcs * mcs, STREAM s)
 
 /* Send an MCS_CONNECT_INITIAL message (ASN.1 BER) */
 static void
-mcs_send_connect_initial(rdpMcs * mcs, STREAM connectdata)
+mcs_send_connect_initial(rdpMcs * mcs)
 {
-	int datalen = connectdata->end - connectdata->data;
-	int length = 9 + 3 * 34 + 4 + datalen;
 	STREAM s;
+	int length;
+	int gccCCrq_length;
+	struct stream gccCCrq;
+
+	gccCCrq.size = 512;
+	gccCCrq.p = gccCCrq.data = (uint8 *) xmalloc(gccCCrq.size);
+	sec_out_gcc_conference_create_request(mcs->sec, &gccCCrq);
+	gccCCrq_length = gccCCrq.end - gccCCrq.data;
+	length = 9 + 3 * 34 + 4 + gccCCrq_length;
 
 	s = iso_init(mcs->iso, length + 5);
 
@@ -74,14 +81,15 @@ mcs_send_connect_initial(rdpMcs * mcs, STREAM connectdata)
 	out_uint8(s, 1);
 
 	ber_out_header(s, BER_TAG_BOOLEAN, 1);	/* upwardFlag */
-	out_uint8(s, 0xff);
+	out_uint8(s, 0xFF);
 
 	mcs_out_domain_params(s, 34, 2, 0, 0xFFFF);	/* targetParameters */
 	mcs_out_domain_params(s, 1, 1, 1, 0x420);	/* minimumParameters */
 	mcs_out_domain_params(s, 0xFFFF, 0xFC17, 0xFFFF, 0xFFFF);	/* maximumParameters */
 
-	ber_out_header(s, BER_TAG_OCTET_STRING, datalen);	/* userData */
-	out_uint8p(s, connectdata->data, datalen);
+	ber_out_header(s, BER_TAG_OCTET_STRING, gccCCrq_length);	/* userData */
+	out_uint8p(s, gccCCrq.data, gccCCrq_length);
+	xfree(gccCCrq.data);
 
 	s_mark_end(s);
 	iso_send(mcs->iso, s);
@@ -91,12 +99,12 @@ mcs_send_connect_initial(rdpMcs * mcs, STREAM connectdata)
 static RD_BOOL
 mcs_recv_connect_response(rdpMcs * mcs)
 {
-	uint8 result;
-	int length;
 	STREAM s;
+	int length;
+	uint8 result;
 
 	s = iso_recv(mcs->iso, NULL);
-	
+
 	if (s == NULL)
 		return False;
 
@@ -129,8 +137,8 @@ mcs_send_edrq(rdpMcs * mcs)
 	s = iso_init(mcs->iso, 5);
 
 	out_uint8(s, (T125_DOMAINMCSPDU_ErectDomainRequest << 2));
-	out_uint16_be(s, 1);	/* height */
-	out_uint16_be(s, 1);	/* interval */
+	out_uint16_le(s, 1);	/* height */
+	out_uint16_le(s, 1);	/* interval */
 
 	s_mark_end(s);
 	iso_send(mcs->iso, s);
@@ -290,71 +298,104 @@ mcs_fp_send(rdpMcs * mcs, STREAM s, uint32 flags)
 STREAM
 mcs_recv(rdpMcs * mcs, uint16 * channel, isoRecvType * ptype)
 {
-	uint8 opcode, pdu_type, length;
 	STREAM s;
+	uint8 byte;
+	uint8 pduType;
+	uint16 length;
 
 	s = iso_recv(mcs->iso, ptype);
+
 	if (s == NULL)
 		return NULL;
+
 	if (*ptype == ISO_RECV_X224)
 	{
 		/* Parse mcsSDin (MCS Send Data Indication PDU, see [T125] section 7, part 7): */
-		in_uint8(s, opcode);
-		pdu_type = opcode >> 2;
-		if (pdu_type != T125_DOMAINMCSPDU_SendDataIndication)
+
+		in_uint8(s, pduType);
+		pduType >>= 2;
+
+		if (pduType != T125_DOMAINMCSPDU_SendDataIndication)
 		{
-			if (pdu_type != T125_DOMAINMCSPDU_DisconnectProviderUltimatum)
+			if (pduType != T125_DOMAINMCSPDU_DisconnectProviderUltimatum)
 			{
-				ui_error(mcs->sec->rdp->inst, "expected data, got %d\n", opcode);
+				ui_error(mcs->sec->rdp->inst, "expected data, got %d\n", pduType);
 			}
 			return NULL;
 		}
-		in_uint8s(s, 2);	/* initiator */
-		in_uint16_be(s, *channel);
-		in_uint8s(s, 1);	/* dataPriority and segmentation flags */
-		in_uint8(s, length);	/* length of userData in 1 or two bytes */
-		if (length & 0x80)
-			in_uint8s(s, 1);	/* second byte of length */
+
+		in_uint8s(s, 2);		/* initiator */
+		in_uint16_be(s, *channel);	/* channelId */
+		in_uint8s(s, 1);		/* flags */
+
+		in_uint8(s, byte);
+		length = (uint16) byte;
+
+		if (byte & 0x80)
+		{
+			length &= ~0x80;
+			length <<= 8;
+			in_uint8(s, byte);
+			length += (uint16) byte;
+		}
 	}
+
 	return s;
 }
 
 /* Establish a connection up to the MCS layer */
 RD_BOOL
-mcs_connect(rdpMcs * mcs, STREAM connectdata)
+mcs_connect(rdpMcs * mcs)
 {
 	int i;
 	int mcs_id;
 	rdpSet * settings;
 
-	mcs_send_connect_initial(mcs, connectdata);
+	mcs_send_connect_initial(mcs);
 	if (!mcs_recv_connect_response(mcs))
+	{
+		ui_error(mcs->sec->rdp->inst, "invalid mcs_recv_connect_response\n");
 		goto error;
+	}
 
 	mcs_send_edrq(mcs);
 
 	mcs_send_aurq(mcs);
 	if (!mcs_recv_aucf(mcs, &(mcs->mcs_userid)))
+	{
+		ui_error(mcs->sec->rdp->inst, "invalid mcs_recv_aucf\n");
 		goto error;
+	}
 
 	mcs_send_cjrq(mcs, mcs->mcs_userid + MCS_USERCHANNEL_BASE);
 
 	if (!mcs_recv_cjcf(mcs))
+	{
+		ui_error(mcs->sec->rdp->inst, "invalid mcs_recv_cjcf\n");
 		goto error;
+	}
 
 	mcs_send_cjrq(mcs, MCS_GLOBAL_CHANNEL);
 	if (!mcs_recv_cjcf(mcs))
+	{
+		ui_error(mcs->sec->rdp->inst, "invalid mcs_recv_cjcf\n");
 		goto error;
+	}
 
 	settings = mcs->sec->rdp->settings;
 	for (i = 0; i < settings->num_channels; i++)
 	{
 		mcs_id = settings->channels[i].chan_id;
 		if (mcs_id >= mcs->mcs_userid + MCS_USERCHANNEL_BASE)
-			goto error;
+		{
+			ui_warning(mcs->sec->rdp->inst, "channel %d got id %d >= %d\n", i, mcs_id, mcs->mcs_userid + MCS_USERCHANNEL_BASE);
+		}
 		mcs_send_cjrq(mcs, mcs_id);
 		if (!mcs_recv_cjcf(mcs))
+		{
+			ui_error(mcs->sec->rdp->inst, "channel %d id %d invalid mcs_recv_cjcf\n", i, mcs_id);
 			goto error;
+		}
 	}
 	return True;
 

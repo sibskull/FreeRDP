@@ -26,9 +26,15 @@
 #include "types.h"
 #include "types_ui.h"
 
+RD_BOOL
+rdp_global_init(void);
+void
+rdp_global_finish(void);
+
 struct rdp_rdp
 {
 	uint8 * next_packet;
+	uint32 rdp_serverid;
 	uint32 rdp_shareid;
 	uint32 packetno;
 	STREAM rdp_s;
@@ -52,8 +58,8 @@ struct rdp_rdp
 	char* redirect_password;
 	uint32 redirect_password_len;
 	char* redirect_username;
-	char* redirect_cookie;
-	uint32 redirect_cookie_len;
+	char* redirect_routingtoken;
+	uint32 redirect_routingtoken_len;
 	char* redirect_target_fqdn;
 	char* redirect_target_netbios_name;
 	char* redirect_target_net_addresses;
@@ -84,19 +90,15 @@ rdp_unicode_input(rdpRdp * rdp, time_t time, uint16 unicode_character);
 void
 rdp_send_client_window_status(rdpRdp * rdp, int status);
 void
-process_colour_pointer_pdu(rdpRdp * rdp, STREAM s);
+process_color_pointer_pdu(rdpRdp * rdp, STREAM s);
 void
 process_cached_pointer_pdu(rdpRdp * rdp, STREAM s);
-void
-process_system_pointer_pdu(rdpRdp * rdp, STREAM s);
 void
 process_new_pointer_pdu(rdpRdp * rdp, STREAM s);
 void
 process_bitmap_updates(rdpRdp * rdp, STREAM s);
 void
 process_palette(rdpRdp * rdp, STREAM s);
-void
-process_disconnect_pdu(STREAM s, struct rdp_inst *inst);
 void
 rdp_main_loop(rdpRdp * rdp, RD_BOOL * deactivated, uint32 * ext_disc_reason);
 RD_BOOL

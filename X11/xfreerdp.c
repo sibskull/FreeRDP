@@ -30,6 +30,7 @@
 #include <errno.h>
 #include <pwd.h>
 #include <pthread.h>
+#include <semaphore.h>
 #include <freerdp/freerdp.h>
 #include <freerdp/chanman.h>
 #include <freerdp/kbd.h>
@@ -38,6 +39,9 @@
 #include "xf_keyboard.h"
 
 #define MAX_PLUGIN_DATA 20
+
+static volatile int g_thread_count = 0;
+static sem_t g_sem;
 
 static int
 set_default_params(xfInfo * xfi)
@@ -63,7 +67,46 @@ set_default_params(xfInfo * xfi)
 	settings->triblt = 0;
 	settings->new_cursors = 1;
 	settings->rdp_version = 5;
+#ifndef DISABLE_TLS
+	settings->tls = 1;
+#endif
 	xfi->fullscreen = xfi->fs_toggle = 0;
+	return 0;
+}
+
+static int
+out_args(void)
+{
+	char help[] =
+		"\n"
+		"FreeRDP - A Free Remote Desktop Protocol Client\n"
+		"See http://freerdp.sourceforge.net for more information\n"
+		"\n"
+		"Usage: xfreerdp [options] server:port\n"
+		"\t-a: color depth (8, 15, 16, 24 or 32)\n"
+		"\t-u: username\n"
+		"\t-p: password\n"
+		"\t-d: domain\n"
+		"\t-k: keyboard layout ID\n"
+		"\t--kbd-list: list all keyboard layout IDs\n"
+		"\t-s: shell\n"
+		"\t-c: directory\n"
+		"\t-g: geometry, using format WxH, default is 1024x768\n"
+		"\t-t: alternative port number, default is 3389\n"
+		"\t-n: hostname\n"
+		"\t-o: console audio\n"
+		"\t-0: console session\n"
+		"\t-f: fullscreen mode\n"
+		"\t-z: enable bulk compression\n"
+		"\t-x: performance flags (m, b or l for modem, broadband or lan)\n"
+#ifndef DISABLE_TLS
+		"\t--no-tls: disable TLS encryption\n"
+#endif
+		"\t--plugin: load a virtual channel plugin\n"
+		"\t--no-osb: disable off screen bitmaps, default on\n"
+		"\t--version: Print out the version and exit\n"
+		"\t-h: show this help\n";
+	printf("%s\n", help);
 	return 0;
 }
 
@@ -77,13 +120,26 @@ process_params(xfInfo * xfi, int argc, char ** argv, int * pindex)
 	RD_PLUGIN_DATA plugin_data[MAX_PLUGIN_DATA + 1];
 	int index;
 	int i, j;
+	struct passwd * pw;
 
 	set_default_params(xfi);
 	settings = xfi->settings;
 	p = getlogin();
+	i = sizeof(settings->username) - 1;
 	if (p != 0)
 	{
-		strncpy(settings->username, p, sizeof(settings->username) - 1);
+		strncpy(settings->username, p, i);
+	}
+	else
+	{
+		pw = getpwuid(getuid());
+		if (pw != 0)
+		{
+			if (pw->pw_name != 0)
+			{
+				strncpy(settings->username, pw->pw_name, i);
+			}
+		}
 	}
 
 	if (argc < *pindex + 1)
@@ -246,6 +302,10 @@ process_params(xfInfo * xfi, int argc, char ** argv, int * pindex)
 		{
 			settings->bulk_compression = 1;
 		}
+		else if (strcmp("--no-osb", argv[*pindex]) == 0)
+		{
+			settings->off_screen_bitmaps = 0;
+		}
 		else if (strcmp("-f", argv[*pindex]) == 0)
 		{
 			xfi->fullscreen = xfi->fs_toggle = 1;
@@ -278,6 +338,12 @@ process_params(xfInfo * xfi, int argc, char ** argv, int * pindex)
 				settings->performanceflags = strtol(argv[*pindex], 0, 16);
 			}
 		}
+#ifndef DISABLE_TLS
+		else if (strcmp("--no-tls", argv[*pindex]) == 0)
+		{
+			settings->tls = 0;
+		}
+#endif
 		else if (strcmp("--plugin", argv[*pindex]) == 0)
 		{
 			*pindex = *pindex + 1;
@@ -310,33 +376,12 @@ process_params(xfInfo * xfi, int argc, char ** argv, int * pindex)
 		}
 		else if ((strcmp("-h", argv[*pindex]) == 0) || strcmp("--help", argv[*pindex]) == 0)
 		{
-			char help[] =
-				"\n"
-				"FreeRDP - A Free Remote Desktop Protocol Client\n"
-				"See http://freerdp.sourceforge.net for more information\n"
-				"\n"
-				"Usage: xfreerdp [options] server:port\n"
-				"\t-a: color depth (16, 24 or 32)\n"
-				"\t-u: username\n"
-				"\t-p: password\n"
-				"\t-d: domain\n"
-				"\t-k: keyboard layout ID\n"
-				"\t--kbd-list: list all keyboard layout IDs\n"
-				"\t-s: shell\n"
-				"\t-c: directory\n"
-				"\t-g: geometry, using format WxH, default is 1024x768\n"
-				"\t-t: alternative port number (default is 3389)\n"
-				"\t-n: hostname\n"
-				"\t-o: console audio\n"
-				"\t-0: console session\n"
-				"\t-f: fullscreen mode\n"
-				"\t-z: enable bulk compression\n"
-				"\t-x: performance flags (m, b or l for modem, broadband or lan)\n"
-				"\t--plugin: load a virtual channel plugin\n"
-				"\t-h: show this help\n"
-				"\n";
-
-			printf(help);
+			out_args();
+			return 1;
+		}
+		else if (strcmp("--version", argv[*pindex]) == 0)
+		{
+			printf("This is FreeRDP version %s\n", PACKAGE_VERSION);
 			return 1;
 		}
 		else if (argv[*pindex][0] != '-')
@@ -520,13 +565,12 @@ run_xfreerdp(xfInfo * xfi)
 		}
 	}
 	/* cleanup */
+	freerdp_chanman_close(xfi->chan_man, inst);
 	inst->rdp_disconnect(inst);
 	freerdp_free(inst);
 	xf_uninit(xfi);
 	return 0;
 }
-
-static int g_thread_count = 0;
 
 static void *
 thread_func(void * arg)
@@ -541,7 +585,10 @@ thread_func(void * arg)
 
 	pthread_detach(pthread_self());
 	g_thread_count--;
-
+	if (g_thread_count < 1)
+	{
+		sem_post(&g_sem);
+	}
 	return NULL;
 }
 
@@ -554,8 +601,18 @@ main(int argc, char ** argv)
 	int index = 1;
 
 	setlocale(LC_CTYPE, "");
+	if (argc == 1)
+	{
+		out_args();
+		return 0;
+	}
+	if (!freerdp_global_init())
+	{
+		printf("Error initializing freerdp\n");
+		return 1;
+	}
 	freerdp_chanman_init();
-
+	sem_init(&g_sem, 0, 0);
 	while (1)
 	{
 		xfi = (xfInfo *) malloc(sizeof(xfInfo));
@@ -572,17 +629,22 @@ main(int argc, char ** argv)
 		}
 
 		xf_kb_init(xfi->keyboard_layout_id);
-		g_thread_count++;
 		printf("starting thread %d to %s:%d\n", g_thread_count,
 			xfi->settings->server, xfi->settings->tcp_port_rdp);
-		pthread_create(&thread, 0, thread_func, xfi);
+		if (pthread_create(&thread, 0, thread_func, xfi) == 0)
+		{
+			g_thread_count++;
+		}
 	}
 
-	while (g_thread_count > 0)
+	if (g_thread_count > 0)
 	{
-		sleep(1);
+		printf("main thread, waiting for all threads to exit\n");
+		sem_wait(&g_sem);
+		printf("main thread, all threads did exit\n");
 	}
 
 	freerdp_chanman_uninit();
+	freerdp_global_finish();
 	return 0;
 }

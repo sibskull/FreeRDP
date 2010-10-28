@@ -79,7 +79,7 @@ my %sym2virt = (
         "AB08" => "VK_OEM_COMMA",
         "AB09" => "VK_OEM_PERIOD",
         "AB10" => "VK_OEM_2",
-        "AB11" => "VK_RSHIFT",
+        "AB11" => "VK_ABNT_C1",
 
         "FK01" => "VK_F1",
         "FK02" => "VK_F2",
@@ -253,8 +253,7 @@ foreach $keymapFile (@keymapFiles) {
 		open("IN", $inDir . "keycodes/" . $keymapFile);
 		open("OUT", ">" . "$outDir" . $keymapFile);
 
-		$time = localtime();
-		print OUT "# This file was generated with xkb.pl ($time)\n";
+		print OUT "# This file was generated with xkb.pl\n";
 		print OUT "# and is based on the X Keyboard Configuration Database $xkbVersion\n";
 		print OUT "# Please use xkb.pl to re-export newer versions of XKB\n";
 		print OUT "\n\n";

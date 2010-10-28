@@ -129,9 +129,12 @@ irp_process_close_request(IRP* irp, char* data, int data_size)
 void
 irp_process_read_request(IRP* irp, char* data, int data_size)
 {
-	irp->length = GET_UINT32(data, 0); /* length */
-	irp->offset = GET_UINT64(data, 4); /* offset */
-	/* 20-byte pad */
+	if (data)
+	{
+		irp->length = GET_UINT32(data, 0); /* length */
+		irp->offset = GET_UINT64(data, 4); /* offset */
+		/* 20-byte pad */
+	}
 
 	if (!irp->dev->service->read)
 	{
@@ -147,11 +150,14 @@ irp_process_read_request(IRP* irp, char* data, int data_size)
 void
 irp_process_write_request(IRP* irp, char* data, int data_size)
 {
-	irp->length = GET_UINT32(data, 0); /* length */
-	irp->offset = GET_UINT64(data, 4); /* offset */
-	/* 20-byte pad */
-	irp->inputBuffer = data + 32;
-	irp->inputBufferLength = irp->length;
+	if (data)
+	{
+		irp->length = GET_UINT32(data, 0); /* length */
+		irp->offset = GET_UINT64(data, 4); /* offset */
+		/* 20-byte pad */
+		irp->inputBuffer = data + 32;
+		irp->inputBufferLength = irp->length;
+	}
 
 	if (!irp->dev->service->write)
 	{
@@ -177,7 +183,7 @@ irp_process_query_volume_information_request(IRP* irp, char* data, int data_size
 	irp->infoClass = GET_UINT32(data, 0); /* fsInformationClass */
 	irp->inputBufferLength = GET_UINT32(data, 4); /* length */
 	/* 24-byte pad */
-	
+
 	/* queryVolumeBuffer */
 	irp->inputBuffer = data + 32;
 
@@ -202,7 +208,7 @@ irp_process_set_volume_information_request(IRP* irp, char* data, int data_size)
 	fsInformationClass = GET_UINT32(data, 0); /* fsInformationClass */
 	length = GET_UINT32(data, 4); /* length */
 	/* 24-byte pad */
-	
+
 	/* setVolumeBuffer */
 #endif
 }
@@ -234,7 +240,7 @@ irp_process_set_information_request(IRP* irp, char* data, int data_size)
 	irp->infoClass = GET_UINT32(data, 0); /* fsInformationClass */
 	irp->inputBufferLength = GET_UINT32(data, 4); /* length */
 	/* 24-byte pad */
-	
+
 	/* setBuffer */
 	irp->inputBuffer = data + 32;
 
@@ -258,7 +264,7 @@ irp_process_directory_control_request(IRP* irp, char* data, int data_size)
 			LLOGLN(10, ("IRP_MN_QUERY_DIRECTORY"));
 			irp_process_query_directory_request(irp, data, data_size);
 			break;
-		
+
 		case IRP_MN_NOTIFY_CHANGE_DIRECTORY:
 			LLOGLN(10, ("IRP_MN_NOTIFY_CHANGE_DIRECTORY"));
 			irp_process_notify_change_directory_request(irp, data, data_size);
@@ -385,4 +391,20 @@ irp_get_event(IRP * irp, uint32 * result)
 		return irp->dev->service->get_event(irp, result);
 
 	return 0;
+}
+
+int
+irp_file_descriptor(IRP * irp)
+{
+	if (irp->dev->service->file_descriptor)
+		return irp->dev->service->file_descriptor(irp);
+
+	return -1;
+}
+
+void
+irp_get_timeouts(IRP * irp, uint32 * timeout, uint32 * interval_timeout)
+{
+	if (irp->dev->service->get_timeouts)
+		irp->dev->service->get_timeouts(irp, timeout, interval_timeout);
 }

@@ -164,6 +164,8 @@ get_rdp_filetime(time_t seconds)
 static time_t
 get_system_filetime(uint64 rdp_time)
 {
+	if (rdp_time == 0LL || rdp_time == (uint64)(-1LL))
+		return 0;
 	return (time_t) (rdp_time / 10000000LL - 11644473600LL);
 }
 
@@ -244,7 +246,7 @@ disk_get_fullpath(DEVICE * dev, const char * path)
 	}
 	if (len > 0 && fullpath[len - 1] == '/')
 		fullpath[len - 1] = '\0';
-		
+
 	return fullpath;
 }
 
@@ -301,7 +303,7 @@ disk_create_fullpath(IRP * irp, FILE_INFO * finfo, const char * fullpath)
 		}
 
 		if ((irp->desiredAccess & GENERIC_ALL)
-		    || (irp->desiredAccess & GENERIC_WRITE)
+			|| (irp->desiredAccess & GENERIC_WRITE)
 			|| (irp->desiredAccess & FILE_WRITE_DATA)
 			|| (irp->desiredAccess & FILE_APPEND_DATA))
 		{
@@ -681,6 +683,7 @@ disk_set_info(IRP * irp)
 	struct utimbuf tvs;
 	int mode;
 	uint32 attr;
+	time_t t;
 
 	LLOGLN(10, ("disk_set_info: class=%d id=%d", irp->infoClass, irp->fileID));
 	finfo = disk_get_file_info(irp->dev, irp->fileID);
@@ -695,17 +698,24 @@ disk_set_info(IRP * irp)
 	switch (irp->infoClass)
 	{
 		case FileBasicInformation:
+			if (stat(finfo->fullpath, &file_stat) != 0)
+				return get_error_status();
+
 			/* Change file time */
-			tvs.actime = get_system_filetime(GET_UINT64(irp->inputBuffer, 8)); /* LastAccessTime */
-			tvs.modtime = get_system_filetime(GET_UINT64(irp->inputBuffer, 16)); /* LastWriteTime */
+			tvs.actime = file_stat.st_atime;
+			tvs.modtime = file_stat.st_mtime;
+			t = get_system_filetime(GET_UINT64(irp->inputBuffer, 8)); /* LastAccessTime */
+			if (t > 0)
+				tvs.actime = t;
+			t = get_system_filetime(GET_UINT64(irp->inputBuffer, 16)); /* LastWriteTime */
+			if (t > 0)
+				tvs.modtime = t;
 			utime(finfo->fullpath, &tvs);
 
 			/* Change read-only flag */
 			attr = GET_UINT32(irp->inputBuffer, 32);
 			if (attr == 0)
 				break;
-			if (stat(finfo->fullpath, &file_stat) != 0)
-				return get_error_status();
 			mode = file_stat.st_mode;
 			if (attr & FILE_ATTRIBUTE_READONLY)
 				mode &= ~(S_IWUSR | S_IWGRP | S_IWOTH);
@@ -803,7 +813,7 @@ disk_query_directory(IRP * irp, uint8 initialQuery, const char * path)
 	if (pdirent == NULL)
 	{
 		return RD_STATUS_NO_MORE_FILES;
-	}		
+	}
 
 	memset(&file_stat, 0, sizeof(struct stat));
 	p = malloc(strlen(finfo->fullpath) + strlen(pdirent->d_name) + 2);
@@ -908,6 +918,13 @@ disk_free(DEVICE * dev)
 	return 0;
 }
 
+static int
+disk_get_fd(IRP * irp)
+{
+	FILE_INFO * finfo = disk_get_file_info(irp->dev, irp->fileID);
+	return finfo->file;
+}
+
 static SERVICE *
 disk_register_service(PDEVMAN pDevman, PDEVMAN_ENTRY_POINTS pEntryPoints)
 {
@@ -929,6 +946,8 @@ disk_register_service(PDEVMAN pDevman, PDEVMAN_ENTRY_POINTS pEntryPoints)
 	srv->free = disk_free;
 	srv->type = RDPDR_DTYP_FILESYSTEM;
 	srv->get_event = NULL;
+	srv->file_descriptor = disk_get_fd;
+	srv->get_timeouts = NULL;
 
 	return srv;
 }

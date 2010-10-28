@@ -1,6 +1,7 @@
 AC_INIT(freerdp, m4_esyscmd([build-aux/git-version-gen .tarball-version]),
         [freerdp-devel@lists.sourceforge.net])
-AM_INIT_AUTOMAKE
+AM_INIT_AUTOMAKE([1.11 dist-xz color-tests parallel-tests])
+AM_SILENT_RULES([yes]) # make --enable-silent-rules the default.
 AM_CONFIG_HEADER([config.h])
 AC_CONFIG_SRCDIR([libfreerdp/freerdp.c])
 
@@ -20,11 +21,9 @@ AH_TEMPLATE(DISABLE_TLS, [Disable TLS encryption])
 AH_TEMPLATE(WITH_SCARD, [Define if smartcard is enabled])
 AH_TEMPLATE(WITH_DEBUG, [Turn on debugging messages])
 AH_TEMPLATE(WITH_DEBUG_CHANNEL, [Turn on debugging messages])
-AH_TEMPLATE(WITH_DEBUG_CLIPBOARD, [Turn on debugging messages])
 AH_TEMPLATE(WITH_DEBUG_KBD, [Turn on debugging messages])
 AH_TEMPLATE(WITH_DEBUG_RDP5, [Turn on debugging messages])
 AH_TEMPLATE(WITH_DEBUG_SCARD, [Turn on debugging messages])
-AH_TEMPLATE(WITH_DEBUG_SEAMLESS, [Turn on debugging messages])
 AH_TEMPLATE(WITH_DEBUG_SERIAL, [Turn on debugging messages])
 AH_TEMPLATE(WITH_DEBUG_SOUND, [Turn on debugging messages])
 
@@ -68,12 +67,27 @@ AC_SUBST(PLUGIN_PATH)
 #
 AC_ARG_WITH([crypto],
 	[AS_HELP_STRING([--with-crypto=ARG],
-		[Choose the crypto library. Valid arguments are openssl, polarssl, no (default is openssl)])],
+		[Choose the crypto library. Valid arguments are nss, gnutls, openssl (the default), polarssl or simple])],
 	[with_crypto=$withval],
 	[with_crypto=openssl])
 
 disable_tls=yes
+AM_CONDITIONAL(CRYPTO_NSS, false)
+AM_CONDITIONAL(CRYPTO_GNUTLS, false)
+AM_CONDITIONAL(CRYPTO_OPENSSL, false)
+AM_CONDITIONAL(CRYPTO_POLARSSL, false)
+AM_CONDITIONAL(CRYPTO_SIMPLE, false)
 case $with_crypto in
+	nss)
+		PKG_CHECK_MODULES(CRYPTO, [nss])
+		AM_CONDITIONAL(CRYPTO_NSS, true)
+		;;
+
+	gnutls)
+		PKG_CHECK_MODULES(CRYPTO, [gnutls >= 2.10.1])
+		AM_CONDITIONAL(CRYPTO_GNUTLS, true)
+		;;
+
 	openssl)
 		PKG_CHECK_MODULES(CRYPTO, [openssl >= 0.9.8a], [], [
 			# For systems like FreeBSD, openssl.pc is not installed. Detect it directly in a more common way
@@ -85,6 +99,7 @@ case $with_crypto in
 			AC_SUBST(CRYPTO_LIBS)
 			AC_SUBST(CRYPTO_CFLAGS)
 		])
+		AM_CONDITIONAL(CRYPTO_OPENSSL, true)
 		disable_tls=no
 		;;
 
@@ -97,11 +112,12 @@ case $with_crypto in
 			[AC_MSG_ERROR(PolarSSL development header not found)])
 		AC_SUBST(CRYPTO_LIBS)
 		AC_SUBST(CRYPTO_CFLAGS)
-		disable_tls=no
+		AM_CONDITIONAL(CRYPTO_POLARSSL, true)
 		;;
 
-	no)
-		AC_MSG_WARN([Cryptographic disabled.])
+	simple)
+		AC_MSG_WARN([Using simple built-in cryptographic library.])
+		AM_CONDITIONAL(CRYPTO_SIMPLE, true)
 		;;
 
 	*)
@@ -204,52 +220,15 @@ int main(int argc, char **argv)
 
 
 #
-# EGD
-#
-AC_ARG_WITH(egd-socket,
-    [  --with-egd-socket=PATH  look for Entropy Gathering Daemon socket at PATH],
-    [EGD_SOCKET="$withval"],
-    [EGD_SOCKET="/var/run/egd-pool"]
-)
-AC_DEFINE_UNQUOTED(EGD_SOCKET, "$EGD_SOCKET")
-
-
-#
-# rdp2vnc
-#
-vncserverconfig=libvncserver-config
-AC_ARG_WITH(libvncserver-config,
-    [  --with-libvncserver-config=CMD  use CMD as libvncserver-config],
-    [vncserverconfig="$withval"]
-)
-AC_ARG_WITH(libvncserver,
-    [  --with-libvncserver     make rdp2vnc],
-    [
-    VNCINC=`$vncserverconfig --cflags`
-    AC_SUBST(VNCINC)
-    LDVNC=`$vncserverconfig --libs`
-    AC_SUBST(LDVNC)
-    VNCLINK=`$vncserverconfig --link`
-    AC_SUBST(VNCLINK)
-    RDP2VNCTARGET="rdp2vnc"
-    AC_SUBST(RDP2VNCTARGET)
-    ]
-)
-
-#
 # sound
 #
 
 sound="yes"
 AC_ARG_WITH(sound,
-    [  --with-sound            select sound system ("oss", "sgi", "sun", "alsa" or "libao") ],
+    [  --with-sound=alsa       select sound system ("alsa" is only option) ],
     [
     sound="$withval"
     ])
-
-AC_CHECK_HEADER(sys/soundcard.h, [HAVE_OSS=1], [HAVE_OSS=0])
-AC_CHECK_HEADER(dmedia/audio.h, [HAVE_SGI=1], [HAVE_SGI=0])
-AC_CHECK_HEADER(sys/audioio.h, [HAVE_SUN=1], [HAVE_SUN=0])
 
 AC_ARG_ENABLE(static-libsamplerate,
     [  --enable-static-libsamplerate link libsamplerate statically],
@@ -257,7 +236,6 @@ AC_ARG_ENABLE(static-libsamplerate,
     [static_libsamplerate=no])
 
 if test -n "$PKG_CONFIG"; then
-    PKG_CHECK_MODULES(LIBAO, ao, [HAVE_LIBAO=1], [HAVE_LIBAO=0])
     PKG_CHECK_MODULES(ALSA, alsa, [HAVE_ALSA=1], [HAVE_ALSA=0])
     AC_ARG_WITH(libsamplerate,
         [  --without-libsamplerate disable libsamplerate support])
@@ -275,43 +253,11 @@ if test -n "$PKG_CONFIG"; then
 fi
 
 AM_CONDITIONAL(WITH_RDPSND, [test "$sound" != "no"])
-AM_CONDITIONAL(RDPSND_OSS, false)
-AM_CONDITIONAL(RDPSND_SGI, false)
-AM_CONDITIONAL(RDPSND_SUN, false)
 AM_CONDITIONAL(RDPSND_ALSA, false)
-AM_CONDITIONAL(RDPSND_LIBAO, false)
 
 case $sound in
     yes)
-        AM_CONDITIONAL(RDPSND_OSS, [test x"$HAVE_OSS" = "x1"])
-        AM_CONDITIONAL(RDPSND_SGI, [test x"$HAVE_SGI" = "x1"])
-        AM_CONDITIONAL(RDPSND_SUN, [test x"$HAVE_SUN" = "x1"])
         AM_CONDITIONAL(RDPSND_ALSA, [test x"$HAVE_ALSA" = "x1"])
-        AM_CONDITIONAL(RDPSND_LIBAO, [test x"$HAVE_LIBAO" = "x1"])
-        ;;
-
-    oss)
-        if test x"$HAVE_OSS" = "x1"; then
-            AM_CONDITIONAL(RDPSND_OSS, true)
-        else
-            AC_MSG_ERROR([Selected sound system is not available.])
-        fi
-        ;;
-
-    sgi)
-        if test x"$HAVE_SGI" = "x1"; then
-            AM_CONDITIONAL(RDPSND_SGI, true)
-        else
-            AC_MSG_ERROR([Selected sound system is not available.])
-        fi
-        ;;
-
-    sun)
-        if test x"$HAVE_SUN" = "x1"; then
-            AM_CONDITIONAL(RDPSND_SUN, true)
-        else
-            AC_MSG_ERROR([Selected sound system is not available.])
-        fi
         ;;
 
     alsa)
@@ -322,20 +268,12 @@ case $sound in
         fi
         ;;
 
-    libao)
-        if test x"$HAVE_LIBAO" = "x1"; then
-            AM_CONDITIONAL(RDPSND_LIBAO, true)
-        else
-            AC_MSG_ERROR([Selected sound system is not available.])
-        fi
-        ;;
-
     no)
         ;;
 
     *)
         AC_MSG_WARN([sound support disabled])
-        AC_MSG_WARN([Currently supported systems are Open Sound System (oss), SGI AL (sgi), Sun/BSD (sun), ALSA (alsa) and libao])
+        AC_MSG_WARN([Currently supported systems is ALSA (alsa) only])
         ;;
 esac
 
@@ -882,17 +820,8 @@ AC_ARG_WITH(debug-rdp5,
 	fi
     ])
 
-AC_ARG_WITH(debug-clipboard,
-    [  --with-debug-clipboard  enable debugging of clipboard code],
-    [
-        if test $withval != "no";
-        then
-            AC_DEFINE(WITH_DEBUG_CLIPBOARD,1)
-	fi
-    ])
-
 AC_ARG_WITH(debug-sound,
-    [  --with-debug-sound  enable debugging of sound code],
+    [  --with-debug-sound      enable debugging of sound code],
     [
         if test $withval != "no";
         then
@@ -901,7 +830,7 @@ AC_ARG_WITH(debug-sound,
     ])
 
 AC_ARG_WITH(debug-channel,
-    [  --with-debug-channel  enable debugging of virtual channel code],
+    [  --with-debug-channel    enable debugging of virtual channel code],
     [
         if test $withval != "no";
         then
@@ -909,17 +838,8 @@ AC_ARG_WITH(debug-channel,
 	fi
     ])
 
-AC_ARG_WITH(debug-seamless,
-    [  --with-debug-seamless  enable debugging of SeamlessRDP code],
-    [
-        if test $withval != "no";
-        then
-            AC_DEFINE(WITH_DEBUG_SEAMLESS,1)
-	fi
-    ])
-
 AC_ARG_WITH(debug-serial,
-    [  --with-debug-serial  enable debugging of Serial code],
+    [  --with-debug-serial     enable debugging of Serial code],
     [
         if test $withval != "no";
         then
@@ -965,6 +885,19 @@ esac
 EXTRA_SUBDIRS=""
 
 #
+# CUnit
+#
+cunit="no"
+AC_ARG_WITH([cunit],
+	[AS_HELP_STRING([--with-cunit], [Build CUnit])],
+	[
+		AC_CHECK_HEADER(CUnit/Basic.h, [], [AC_MSG_ERROR(CUnit development header not found)])
+		cunit="yes"
+		EXTRA_SUBDIRS="$EXTRA_SUBDIRS cunit"
+	]
+)
+
+#
 # X11
 #
 AM_CONDITIONAL(WITH_X11, true)
@@ -1005,16 +938,23 @@ doc/Makefile
 include/Makefile
 libfreerdpkbd/Makefile
 keymaps/Makefile
+cunit/Makefile
+libfreerdpgdi/Makefile
 libfreerdpchanman/Makefile
 X11/Makefile
 dfb/Makefile
+win/Makefile
 channels/common/Makefile
 channels/rdpsnd/Makefile
+channels/drdynvc/Makefile
+channels/drdynvc/pnpdr/Makefile
+channels/drdynvc/audin/Makefile
 channels/cliprdr/Makefile
 channels/rdpdr/Makefile
 channels/rdpdr/disk/Makefile
 channels/rdpdr/printer/Makefile
 channels/rdpdr/serial/Makefile
+channels/rdpdr/parallel/Makefile
 contrib/Makefile
 ])
 
@@ -1025,10 +965,13 @@ echo "FreeRDP configure result:"
 echo
 echo "Cryptography : $with_crypto"
 if test "x$disable_tls" = "xyes"; then
-	echo "               (TLS disabled)"
+	echo "TLS          : disabled"
+else
+	echo "TLS          : enabled"
 fi
 echo "Sound        : $sound"
 echo "Printer      : $printer"
+echo "CUnit        : $cunit"
 echo "X11          : $x11"
 echo "DirectFB     : $dfb"
 

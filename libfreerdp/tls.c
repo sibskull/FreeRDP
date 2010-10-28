@@ -276,12 +276,12 @@ tls_disconnect(SSL *ssl)
 }
 
 /* Write data over TLS connection */
-int tls_write(SSL *ssl, char* b, int size)
+int tls_write(SSL *ssl, char* b, int length)
 {
 	int write_status;
 	int bytesWritten = 0;
 
-	write_status = SSL_write(ssl, b, size);
+	write_status = SSL_write(ssl, b, length);
 
 	switch (SSL_get_error(ssl, write_status))
 	{
@@ -294,42 +294,34 @@ int tls_write(SSL *ssl, char* b, int size)
 			break;
 	}
 
-	if (bytesWritten < size)
-		return bytesWritten += tls_write(ssl, &b[bytesWritten], size - bytesWritten);
+	if (bytesWritten < length)
+		return bytesWritten += tls_write(ssl, &b[bytesWritten], length - bytesWritten);
 	else
 		return bytesWritten;
 }
 
 /* Read data over TLS connection */
-int tls_read(SSL *ssl, char* b, int size)
+int tls_read(SSL *ssl, char* b, int length)
 {
-	int read_status;
-	int bytesRead = 0;
+	int status;
 
-	read_status = SSL_read(ssl, b, size);
-
-	switch (SSL_get_error(ssl, read_status))
+	while (True)
 	{
-		case SSL_ERROR_NONE:
-			bytesRead += read_status;
-			break;
+		status = SSL_read(ssl, b, length);
 
-		case SSL_ERROR_WANT_READ:
+		switch (SSL_get_error(ssl, status))
+		{
+			case SSL_ERROR_NONE:
+				return status;
+				break;
 
-			if (size - bytesRead < 128)
-			{
-					/* the buffer is almost full, allocate more memory */
-					size += 1024;
-					xrealloc(b, size);
-			}
+			case SSL_ERROR_WANT_READ:
+				break;
 
-			bytesRead += tls_read(ssl, &b[bytesRead], size - bytesRead);
-			break;
-
-		default:
-			tls_printf("SSL_read", ssl, read_status);
-			break;
+			default:
+				tls_printf("SSL_read", ssl, status);
+				return -1;
+				break;
+		}
 	}
-
-	return bytesRead;
 }

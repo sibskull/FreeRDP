@@ -30,7 +30,6 @@ static uint8 *
 rdp_skip_capset_header(STREAM s, int size)
 {
 	uint8 * rv;
-
 	rv = s->p;
 	s->p += size;
 	return rv;
@@ -54,8 +53,8 @@ rdp_out_capset_header(STREAM s, uint8 * header, uint16 capabilitySetType)
 void
 rdp_out_general_capset(rdpRdp * rdp, STREAM s)
 {
-	uint8 * header;
 	int flags;
+	uint8 * header;
 
 	header = rdp_skip_capset_header(s, 4);
 	out_uint16_le(s, OS_MAJOR_TYPE_WINDOWS); // osMajorType, should we lie?
@@ -149,7 +148,7 @@ rdp_process_bitmap_capset(rdpRdp * rdp, STREAM s)
 	 */
 	if (rdp->settings->server_depth != preferredBitsPerPixel)
 	{
-		ui_warning(rdp->inst, "Remote desktop does not support colour depth %d; falling back to %d\n",
+		ui_warning(rdp->inst, "Remote desktop does not support color depth %d; falling back to %d\n",
 			rdp->settings->server_depth, preferredBitsPerPixel);
 		rdp->settings->server_depth = preferredBitsPerPixel;
 	}

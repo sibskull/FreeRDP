@@ -75,7 +75,10 @@
 #define IOCTL_SERIAL_SET_HANDFLOW           0x001B0064
 #define IOCTL_SERIAL_GET_MODEMSTATUS        0x001B0068
 #define IOCTL_SERIAL_GET_DTRRTS             0x001B0078
-#define IOCTL_SERIAL_GET_COMMSTATUS         0x001B0084
+
+/* according to [MS-RDPESP] it should be 0x001B0084, but servers send 0x001B006C */
+#define IOCTL_SERIAL_GET_COMMSTATUS         0x001B006C
+
 #define IOCTL_SERIAL_GET_PROPERTIES         0x001B0074
 #define IOCTL_SERIAL_XOFF_COUNTER           0x001B0070
 #define IOCTL_SERIAL_LSRMST_INSERT          0x001B007C
@@ -85,18 +88,6 @@
 #define IOCTL_SERIAL_GET_MODEM_CONTROL      0x001B0094
 #define IOCTL_SERIAL_SET_MODEM_CONTROL      0x001B0098
 #define IOCTL_SERIAL_SET_FIFO_CONTROL       0x001B009C
-#define IOCTL_PAR_QUERY_INFORMATION         0x00160004
-#define IOCTL_PAR_SET_INFORMATION           0x00160008
-#define IOCTL_PAR_QUERY_DEVICE_ID           0x0016000C
-#define IOCTL_PAR_QUERY_DEVICE_ID_SIZE      0x00160010
-#define IOCTL_IEEE1284_GET_MODE             0x00160014
-#define IOCTL_IEEE1284_NEGOTIATE            0x00160018
-#define IOCTL_PAR_SET_WRITE_ADDRESS         0x0016001C
-#define IOCTL_PAR_SET_READ_ADDRESS          0x00160020
-#define IOCTL_PAR_GET_DEVICE_CAPS           0x00160024
-#define IOCTL_PAR_GET_DEFAULT_MODES         0x00160028
-#define IOCTL_PAR_QUERY_RAW_DEVICE_ID       0x00160030
-#define IOCTL_PAR_IS_PORT_FREE              0x00160054
 
 
 #define STOP_BITS_1			0
@@ -149,6 +140,9 @@
 #define SERIAL_CHAR_EVENT   3
 #define SERIAL_CHAR_XON     4
 #define SERIAL_CHAR_XOFF    5
+
+/* http://www.codeproject.com/KB/system/chaiyasit_t.aspx */
+#define SERIAL_TIMEOUT_MAX 4294967295u
 
 #ifndef CRTSCTS
 #define CRTSCTS 0
@@ -307,6 +301,22 @@ serial_get_event(IRP * irp, uint32 * result)
 	return ret;
 }
 
+static int
+serial_get_fd(IRP * irp)
+{
+	return 	((SERIAL_DEVICE_INFO *) irp->dev->info)->file;
+}
+
+static void
+serial_get_timeouts(IRP * irp, uint32 * timeout, uint32 * interval_timeout)
+{
+	SERIAL_DEVICE_INFO *info = (SERIAL_DEVICE_INFO *) irp->dev->info;
+
+	*timeout = info->read_total_timeout_multiplier * irp->length +
+				info->read_total_timeout_constant;
+	*interval_timeout = info->read_interval_timeout;
+}
+
 static uint32
 serial_control(IRP * irp)
 {
@@ -400,6 +410,15 @@ serial_control(IRP * irp)
 			info->read_total_timeout_constant = GET_UINT32(inbuf, 8);
 			info->write_total_timeout_multiplier = GET_UINT32(inbuf, 12);
 			info->write_total_timeout_constant = GET_UINT32(inbuf, 16);
+
+			/* http://www.codeproject.com/KB/system/chaiyasit_t.aspx, see 'ReadIntervalTimeout' section
+				http://msdn.microsoft.com/en-us/library/ms885171.aspx */
+			if (info->read_interval_timeout == SERIAL_TIMEOUT_MAX)
+			{
+				info->read_interval_timeout = 0;
+				info->read_total_timeout_multiplier = 0;
+			}
+
 			LLOGLN(10, ("serial_ioctl -> SERIAL_SET_TIMEOUTS read timeout %d %d %d",
 				      info->read_interval_timeout,
 				      info->read_total_timeout_multiplier,
@@ -512,9 +531,11 @@ serial_control(IRP * irp)
 				flush_mask |= TCIFLUSH;
 			if (flush_mask != 0)
 				tcflush(info->file, flush_mask);
-			if (purge_mask & SERIAL_PURGE_TXABORT ||
-				purge_mask & SERIAL_PURGE_RXABORT)
-				ret = RD_STATUS_CANCELLED;
+
+			if (purge_mask & SERIAL_PURGE_TXABORT)
+				irp->abortIO |= RDPDR_ABORT_IO_WRITE;
+			if(purge_mask & SERIAL_PURGE_RXABORT)
+				irp->abortIO |= RDPDR_ABORT_IO_READ;
 			break;
 		case IOCTL_SERIAL_WAIT_ON_MASK:
 			LLOGLN(10, ("serial_ioctl -> SERIAL_WAIT_ON_MASK %X", info->wait_mask));
@@ -1119,6 +1140,8 @@ serial_register_service(PDEVMAN pDevman, PDEVMAN_ENTRY_POINTS pEntryPoints)
 	srv->free = serial_free;
 	srv->type = RDPDR_DTYP_SERIAL;
 	srv->get_event = serial_get_event;
+	srv->file_descriptor = serial_get_fd;
+	srv->get_timeouts = serial_get_timeouts;
 
 	return srv;
 }

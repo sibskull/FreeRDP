@@ -86,7 +86,14 @@ static void
 x224_send_connection_request(rdpIso * iso, char *username)
 {
 	STREAM s;
-	int length = 30 + strlen(username);
+	int length = 11;
+
+	if (iso->mcs->sec->rdp->redirect_routingtoken)
+		/* routingToken */
+		length += iso->mcs->sec->rdp->redirect_routingtoken_len;
+	else
+		/* cookie */
+		length += 19 + strlen(username);
 
 	if (iso->mcs->sec->requested_protocol > PROTOCOL_RDP)
 		length += 8;
@@ -111,16 +118,22 @@ x224_send_connection_request(rdpIso * iso, char *username)
 	out_uint16_le(s, 0);	/* src_ref */
 	out_uint8(s, 0);	/* class */
 
-	/* cookie */
-	out_uint8p(s, "Cookie: mstshash=", strlen("Cookie: mstshash="));
-	out_uint8p(s, username, strlen(username));
-
-	/* routingToken */
-	out_uint8(s, 0x0D);	/* CR */
-	out_uint8(s, 0x0A);	/* LF */
+	if (iso->mcs->sec->rdp->redirect_routingtoken)
+	{
+		/* routingToken */
+		out_uint8p(s, iso->mcs->sec->rdp->redirect_routingtoken, iso->mcs->sec->rdp->redirect_routingtoken_len);
+	}
+	else
+	{
+		/* cookie */
+		out_uint8p(s, "Cookie: mstshash=", strlen("Cookie: mstshash="));
+		out_uint8p(s, username, strlen(username));
+		out_uint8(s, 0x0D);	/* CR */
+		out_uint8(s, 0x0A);	/* LF */
+	}
 
 	if (iso->mcs->sec->requested_protocol > PROTOCOL_RDP)
-	{	
+	{
 		out_uint8(s, TYPE_RDP_NEG_REQ); /* When using TLS, NLA, or both, RDP_NEG_DATA should be present */
 		out_uint8(s, 0x00);	/* flags, must be set to zero */
 		out_uint16_le(s, 8);	/* RDP_NEG_DATA length (8) */
@@ -203,6 +216,7 @@ rdp_process_negotiation_failure(rdpIso * iso, STREAM s)
 				break;
 		}
 	}
+	iso->mcs->sec->denied_protocols |= iso->mcs->sec->requested_protocol;
 }
 
 /* Receive an X.224 TPDU */
@@ -215,7 +229,7 @@ x224_recv(rdpIso * iso, STREAM s, int length, uint8 * pcode)
 	uint8 type;
 
 	s = tcp_recv(iso->tcp, s, length - 4);
-	
+
 	if (s == NULL)
 		return NULL;
 
@@ -224,7 +238,7 @@ x224_recv(rdpIso * iso, STREAM s, int length, uint8 * pcode)
 	in_uint8(s, code);
 
 	subcode = code & 0x0F;	/* get the lower nibble */
-	code &= 0xF0;	/* take out lower nibble */
+	code &= 0xF0;		/* take out lower nibble */
 
 	*pcode = code;
 
@@ -243,27 +257,27 @@ x224_recv(rdpIso * iso, STREAM s, int length, uint8 * pcode)
 	{
 		/* Connection Request */
 		case X224_TPDU_CONNECTION_REQUEST:
-			printf("X224_TPDU_CONNECTION_REQUEST\n");
+			//printf("X224_TPDU_CONNECTION_REQUEST\n");
 			break;
 
 		/* Connection Confirm */
 		case X224_TPDU_CONNECTION_CONFIRM:
-			printf("X224_TPDU_CONNECTION_CONFIRM\n");
+			//printf("X224_TPDU_CONNECTION_CONFIRM\n");
 			break;
 
 		/* Disconnect Request */
 		case X224_TPDU_DISCONNECT_REQUEST:
-			printf("X224_TPDU_DISCONNECT_REQUEST\n");
+			//printf("X224_TPDU_DISCONNECT_REQUEST\n");
 			break;
 
 		/* Data */
 		case X224_TPDU_DATA:
-			printf("X224_TPDU_DATA\n");
+			//printf("X224_TPDU_DATA\n");
 			break;
 
 		/* Error */
 		case X224_TPDU_ERROR:
-			printf("X224_TPDU_ERROR\n");
+			//printf("X224_TPDU_ERROR\n");
 			break;
 	}
 
@@ -275,11 +289,11 @@ x224_recv(rdpIso * iso, STREAM s, int length, uint8 * pcode)
 		switch (type)
 		{
 			case TYPE_RDP_NEG_RSP:
-				printf("TYPE_RDP_NEG_RSP\n");
+				//printf("TYPE_RDP_NEG_RSP\n");
 				rdp_process_negotiation_response(iso, s);
 				break;
 			case TYPE_RDP_NEG_FAILURE:
-				printf("TYPE_RDP_NEG_FAILURE\n");
+				//printf("TYPE_RDP_NEG_FAILURE\n");
 				rdp_process_negotiation_failure(iso, s);
 				break;
 		}
@@ -327,7 +341,7 @@ tpkt_recv(rdpIso * iso, uint8 * pcode, isoRecvType * ptype)
 			length &= ~0x80;
 			next_be(s, length);
 		}
-		
+
 		s = tcp_recv(iso->tcp, s, length - 4);
 		return s;
 	}
@@ -339,6 +353,7 @@ iso_negotiate_encryption(rdpIso * iso, char *username)
 {
 	uint8 code;
 
+	iso->mcs->sec->denied_protocols = 0;
 	if (iso->mcs->sec->requested_protocol == PROTOCOL_RDP)
 	{
 		/* We use legacy RDP encryption, so we won't attempt to negotiate */
@@ -358,22 +373,10 @@ iso_negotiate_encryption(rdpIso * iso, char *username)
 
 		/* Attempt to receive negotiation response */
 		if (tpkt_recv(iso, &code, NULL) == NULL)
-		{
-			if (iso->mcs->sec->requested_protocol & iso->mcs->sec->denied_protocols)
-			{
-				/* Negotiation failure, downgrade encryption and try again */
-				iso->mcs->sec->requested_protocol = PROTOCOL_RDP;
+			return False;
 
-				/* second negotiation attempt */
-				iso->mcs->sec->negotiation_state = 2;
-
-				x224_send_connection_request(iso, username);
-
-				/* Receive negotiation response */
-				if (tpkt_recv(iso, &code, NULL) == NULL)
-					return False;
-			}
-		}
+		if (iso->mcs->sec->denied_protocols & iso->mcs->sec->requested_protocol)
+			return False;
 	}
 
 	return True;
@@ -415,13 +418,13 @@ iso_send(rdpIso * iso, STREAM s)
 	s_pop_layer(s, iso_hdr);
 	length = s->end - s->p;
 
-	out_uint8(s, 3);	/* version */
-	out_uint8(s, 0);	/* reserved */
+	out_uint8(s, 3);		/* version */
+	out_uint8(s, 0);		/* reserved */
 	out_uint16_be(s, length);
 
-	out_uint8(s, 2);	/* hdrlen */
+	out_uint8(s, 2);		/* hdrlen */
 	out_uint8(s, X224_TPDU_DATA);	/* code */
-	out_uint8(s, 0x80);	/* eot */
+	out_uint8(s, 0x80);		/* eot */
 
 	tcp_send(iso->tcp, s);
 }
@@ -489,10 +492,24 @@ iso_recv(rdpIso * iso, isoRecvType * ptype)
 RD_BOOL
 iso_connect(rdpIso * iso, char *server, char *username, int port)
 {
+	RD_BOOL ret;
+
 	if (!tcp_connect(iso->tcp, server, port))
 		return False;
 
-	return iso_negotiate_encryption(iso, username);
+	ret = iso_negotiate_encryption(iso, username);
+	if (!ret && iso->mcs->sec->negotiation_state == 1)
+	{
+		tcp_disconnect(iso->tcp);
+		if (!tcp_connect(iso->tcp, server, port))
+			return False;
+
+		/* Negotiation failure, downgrade encryption and try again */
+		iso->mcs->sec->requested_protocol = PROTOCOL_RDP;
+		ret = iso_negotiate_encryption(iso, username);
+	}
+
+	return ret;
 }
 
 /* Disconnect from the ISO layer */

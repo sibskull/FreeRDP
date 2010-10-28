@@ -30,36 +30,64 @@
 #define RDP_ORDER_SMALL      0x40
 #define RDP_ORDER_TINY       0x80
 
+/* Primary Drawing Orders */
 enum RDP_ORDER_TYPE
 {
-	RDP_ORDER_DESTBLT = 0,
+	RDP_ORDER_DSTBLT = 0,
 	RDP_ORDER_PATBLT = 1,
-	RDP_ORDER_SCREENBLT = 2,
-	RDP_ORDER_LINE = 9,
-	RDP_ORDER_RECT = 10,
-	RDP_ORDER_DESKSAVE = 11,
+	RDP_ORDER_SCRBLT = 2,
+	RDP_ORDER_DRAWNINEGRID = 8,
+	RDP_ORDER_LINETO = 9,
+	RDP_ORDER_OPAQUERECT = 10,
+	RDP_ORDER_SAVEBITMAP = 11,
 	RDP_ORDER_MEMBLT = 13,
-	RDP_ORDER_TRIBLT = 14,
-	RDP_ORDER_POLYGON = 20,
-	RDP_ORDER_POLYGON2 = 21,
+	RDP_ORDER_MEM3BLT = 14,
+	RDP_ORDER_MULTIDSTBLT = 15,
+	RDP_ORDER_MULTIPATBLT = 16,
+	RDP_ORDER_MULTISCRBLT = 17,
+	RDP_ORDER_MULTIOPAQUERECT = 18,
+	RDP_ORDER_FAST_GLYPH_INDEX = 19,
+	RDP_ORDER_POLYGON_SC = 20,
+	RDP_ORDER_POLYGON_CB = 21,
 	RDP_ORDER_POLYLINE = 22,
-	RDP_ORDER_ELLIPSE = 25,
-	RDP_ORDER_ELLIPSE2 = 26,
-	RDP_ORDER_TEXT2 = 27
+	RDP_ORDER_ELLIPSE_SC = 25,
+	RDP_ORDER_ELLIPSE_CB = 26,
+	RDP_ORDER_GLYPH_INDEX = 27
 };
 
+/* Secondary Drawing Orders */
 enum RDP_SECONDARY_ORDER_TYPE
 {
-	RDP_ORDER_RAW_BMPCACHE = 0,
-	RDP_ORDER_COLCACHE = 1,
-	RDP_ORDER_BMPCACHE = 2,
-	RDP_ORDER_FONTCACHE = 3,
-	RDP_ORDER_RAW_BMPCACHE2 = 4,
-	RDP_ORDER_BMPCACHE2 = 5,
-	RDP_ORDER_BRUSHCACHE = 7
+	RDP_ORDER_CACHE_BITMAP_UNCOMPRESSED = 0,
+	RDP_ORDER_CACHE_COLOR_TABLE = 1,
+	RDP_ORDER_CACHE_BITMAP_COMPRESSED = 2,
+	RDP_ORDER_CACHE_GLYPH = 3,
+	RDP_ORDER_CACHE_BITMAP_UNCOMPRESSED_REV2 = 4,
+	RDP_ORDER_CACHE_BITMAP_COMPRESSED_REV2 = 5,
+	RDP_ORDER_CACHE_BRUSH = 7,
+	RDP_ORDER_CACHE_BITMAP_COMPRESSED_REV3 = 8
 };
 
-typedef struct _DESTBLT_ORDER
+/* Alternate Secondary Drawing Orders */
+enum RDP_ALTSEC_ORDER_TYPE
+{
+	RDP_ORDER_ALTSEC_SWITCH_SURFACE = 0,
+	RDP_ORDER_ALTSEC_CREATE_OFFSCR_BITMAP = 1,
+	RDP_ORDER_ALTSEC_STREAM_BITMAP_FIRST = 2,
+	RDP_ORDER_ALTSEC_STREAM_BITMAP_NEXT = 3,
+	RDP_ORDER_ALTSEC_CREATE_NINEGRID_BITMAP = 4,
+	RDP_ORDER_ALTSEC_GDIP_FIRST = 5,
+	RDP_ORDER_ALTSEC_GDIP_NEXT = 6,
+	RDP_ORDER_ALTSEC_GDIP_END = 7,
+	RDP_ORDER_ALTSEC_GDIP_CACHE_FIRST = 8,
+	RDP_ORDER_ALTSEC_GDIP_CACHE_NEXT = 9,
+	RDP_ORDER_ALTSEC_GDIP_CACHE_END = 10,
+	RDP_ORDER_ALTSEC_WINDOW = 11,
+	RDP_ORDER_ALTSEC_COMPDESK_FIRST = 12,
+	RDP_ORDER_ALTSEC_FRAME_MARKER = 13
+};
+
+typedef struct _DSTBLT_ORDER
 {
 	sint16 x;
 	sint16 y;
@@ -68,7 +96,7 @@ typedef struct _DESTBLT_ORDER
 	uint8 opcode;
 
 }
-DESTBLT_ORDER;
+DSTBLT_ORDER;
 
 typedef struct _PATBLT_ORDER
 {
@@ -77,14 +105,14 @@ typedef struct _PATBLT_ORDER
 	sint16 cx;
 	sint16 cy;
 	uint8 opcode;
-	uint32 bgcolour;
-	uint32 fgcolour;
+	uint32 bgcolor;
+	uint32 fgcolor;
 	RD_BRUSH brush;
 
 }
 PATBLT_ORDER;
 
-typedef struct _SCREENBLT_ORDER
+typedef struct _SCRBLT_ORDER
 {
 	sint16 x;
 	sint16 y;
@@ -95,34 +123,34 @@ typedef struct _SCREENBLT_ORDER
 	sint16 srcy;
 
 }
-SCREENBLT_ORDER;
+SCRBLT_ORDER;
 
-typedef struct _LINE_ORDER
+typedef struct _LINETO_ORDER
 {
 	uint16 mixmode;
 	sint16 startx;
 	sint16 starty;
 	sint16 endx;
 	sint16 endy;
-	uint32 bgcolour;
+	uint32 bgcolor;
 	uint8 opcode;
 	RD_PEN pen;
 
 }
-LINE_ORDER;
+LINETO_ORDER;
 
-typedef struct _RECT_ORDER
+typedef struct _OPAQUERECT_ORDER
 {
 	sint16 x;
 	sint16 y;
 	sint16 cx;
 	sint16 cy;
-	uint32 colour;
+	uint32 color;
 
 }
-RECT_ORDER;
+OPAQUERECT_ORDER;
 
-typedef struct _DESKSAVE_ORDER
+typedef struct _SAVEBITMAP_ORDER
 {
 	uint32 offset;
 	sint16 left;
@@ -132,11 +160,11 @@ typedef struct _DESKSAVE_ORDER
 	uint8 action;
 
 }
-DESKSAVE_ORDER;
+SAVEBITMAP_ORDER;
 
-typedef struct _TRIBLT_ORDER
+typedef struct _MEM3BLT_ORDER
 {
-	uint8 colour_table;
+	uint8 color_table;
 	uint8 cache_id;
 	sint16 x;
 	sint16 y;
@@ -145,18 +173,18 @@ typedef struct _TRIBLT_ORDER
 	uint8 opcode;
 	sint16 srcx;
 	sint16 srcy;
-	uint32 bgcolour;
-	uint32 fgcolour;
+	uint32 bgcolor;
+	uint32 fgcolor;
 	RD_BRUSH brush;
 	uint16 cache_idx;
 	uint16 unknown;
 
 }
-TRIBLT_ORDER;
+MEM3BLT_ORDER;
 
 typedef struct _MEMBLT_ORDER
 {
-	uint8 colour_table;
+	uint8 color_table;
 	uint8 cache_id;
 	sint16 x;
 	sint16 y;
@@ -172,42 +200,42 @@ MEMBLT_ORDER;
 
 #define MAX_DATA 256
 
-typedef struct _POLYGON_ORDER
+typedef struct _POLYGON_SC_ORDER
 {
 	sint16 x;
 	sint16 y;
 	uint8 opcode;
 	uint8 fillmode;
-	uint32 fgcolour;
+	uint32 fgcolor;
 	uint8 npoints;
 	uint8 datasize;
 	uint8 data[MAX_DATA];
 
 }
-POLYGON_ORDER;
+POLYGON_SC_ORDER;
 
-typedef struct _POLYGON2_ORDER
+typedef struct _POLYGON_CB_ORDER
 {
 	sint16 x;
 	sint16 y;
 	uint8 opcode;
 	uint8 fillmode;
-	uint32 bgcolour;
-	uint32 fgcolour;
+	uint32 bgcolor;
+	uint32 fgcolor;
 	RD_BRUSH brush;
 	uint8 npoints;
 	uint8 datasize;
 	uint8 data[MAX_DATA];
 
 }
-POLYGON2_ORDER;
+POLYGON_CB_ORDER;
 
 typedef struct _POLYLINE_ORDER
 {
 	sint16 x;
 	sint16 y;
 	uint8 opcode;
-	uint32 fgcolour;
+	uint32 fgcolor;
 	uint8 lines;
 	uint8 datasize;
 	uint8 data[MAX_DATA];
@@ -215,7 +243,7 @@ typedef struct _POLYLINE_ORDER
 }
 POLYLINE_ORDER;
 
-typedef struct _ELLIPSE_ORDER
+typedef struct _ELLIPSE_SC_ORDER
 {
 	sint16 left;
 	sint16 top;
@@ -223,12 +251,12 @@ typedef struct _ELLIPSE_ORDER
 	sint16 bottom;
 	uint8 opcode;
 	uint8 fillmode;
-	uint32 fgcolour;
+	uint32 fgcolor;
 
 }
-ELLIPSE_ORDER;
+ELLIPSE_SC_ORDER;
 
-typedef struct _ELLIPSE2_ORDER
+typedef struct _ELLIPSE_CB_ORDER
 {
 	sint16 left;
 	sint16 top;
@@ -237,22 +265,22 @@ typedef struct _ELLIPSE2_ORDER
 	uint8 opcode;
 	uint8 fillmode;
 	RD_BRUSH brush;
-	uint32 bgcolour;
-	uint32 fgcolour;
+	uint32 bgcolor;
+	uint32 fgcolor;
 
 }
-ELLIPSE2_ORDER;
+ELLIPSE_CB_ORDER;
 
 #define MAX_TEXT 256
 
-typedef struct _TEXT2_ORDER
+typedef struct _GLYPH_INDEX_ORDER
 {
 	uint8 font;
 	uint8 flags;
 	uint8 opcode;
 	uint8 mixmode;
-	uint32 bgcolour;
-	uint32 fgcolour;
+	uint32 bgcolor;
+	uint32 fgcolor;
 	sint16 clipleft;
 	sint16 cliptop;
 	sint16 clipright;
@@ -268,32 +296,31 @@ typedef struct _TEXT2_ORDER
 	uint8 text[MAX_TEXT];
 
 }
-TEXT2_ORDER;
+GLYPH_INDEX_ORDER;
 
 typedef struct _RDP_ORDER_STATE
 {
 	uint8 order_type;
 	BOUNDS bounds;
 
-	DESTBLT_ORDER destblt;
+	DSTBLT_ORDER dstblt;
 	PATBLT_ORDER patblt;
-	SCREENBLT_ORDER screenblt;
-	LINE_ORDER line;
-	RECT_ORDER rect;
-	DESKSAVE_ORDER desksave;
+	SCRBLT_ORDER scrblt;
+	LINETO_ORDER lineto;
+	OPAQUERECT_ORDER opaquerect;
+	SAVEBITMAP_ORDER savebitmap;
 	MEMBLT_ORDER memblt;
-	TRIBLT_ORDER triblt;
-	POLYGON_ORDER polygon;
-	POLYGON2_ORDER polygon2;
+	MEM3BLT_ORDER mem3blt;
+	POLYGON_SC_ORDER polygon_sc;
+	POLYGON_CB_ORDER polygon_cb;
 	POLYLINE_ORDER polyline;
-	ELLIPSE_ORDER ellipse;
-	ELLIPSE2_ORDER ellipse2;
-	TEXT2_ORDER text2;
-
+	ELLIPSE_SC_ORDER ellipse_sc;
+	ELLIPSE_CB_ORDER ellipse_cb;
+	GLYPH_INDEX_ORDER glyph_index;
 }
 RDP_ORDER_STATE;
 
-typedef struct _RDP_RAW_BMPCACHE_ORDER
+typedef struct _RDP_CACHE_BITMAP_UNCOMPRESSED_ORDER
 {
 	uint8 cache_id;
 	uint8 pad1;
@@ -305,9 +332,9 @@ typedef struct _RDP_RAW_BMPCACHE_ORDER
 	uint8 *data;
 
 }
-RDP_RAW_BMPCACHE_ORDER;
+RDP_CACHE_BITMAP_UNCOMPRESSED_ORDER;
 
-typedef struct _RDP_BMPCACHE_ORDER
+typedef struct _RDP_CACHE_BITMAP_COMPRESSED_ORDER
 {
 	uint8 cache_id;
 	uint8 pad1;
@@ -323,9 +350,9 @@ typedef struct _RDP_BMPCACHE_ORDER
 	uint8 *data;
 
 }
-RDP_BMPCACHE_ORDER;
+RDP_CACHE_BITMAP_COMPRESSED_ORDER;
 
-/* RDP_BMPCACHE2_ORDER */
+/* RDP_CACHE_BITMAP_COMPRESSED_REV2_ORDER */
 #define ID_MASK			0x0007
 #define MODE_MASK		0x0038
 #define SQUARE			0x0080
@@ -339,7 +366,7 @@ RDP_BMPCACHE_ORDER;
 
 #define MAX_GLYPH 32
 
-typedef struct _RDP_FONT_GLYPH
+typedef struct _RDP_GLYPH
 {
 	uint16 character;
 	uint16 unknown;
@@ -349,26 +376,25 @@ typedef struct _RDP_FONT_GLYPH
 	uint8 data[MAX_GLYPH];
 
 }
-RDP_FONT_GLYPH;
+RDP_GLYPH;
 
 #define MAX_GLYPHS 256
 
-typedef struct _RDP_FONTCACHE_ORDER
+typedef struct _RDP_CACHE_GLYPH_ORDER
 {
 	uint8 font;
 	uint8 nglyphs;
-	RDP_FONT_GLYPH glyphs[MAX_GLYPHS];
+	RDP_GLYPH glyphs[MAX_GLYPHS];
 
 }
-RDP_FONTCACHE_ORDER;
+RDP_CACHE_GLYPH_ORDER;
 
-typedef struct _RDP_COLCACHE_ORDER
+typedef struct _RDP_CACHE_COLOR_TABLE_ORDER
 {
 	uint8 cache_id;
-	RD_COLOURMAP map;
-
+	RD_PALETTE map;
 }
-RDP_COLCACHE_ORDER;
+RDP_CACHE_COLOR_TABLE_ORDER;
 
 #endif // __ORDERSTYPES_H
 

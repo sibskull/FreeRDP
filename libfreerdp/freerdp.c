@@ -187,16 +187,16 @@ ui_line(rdpInst * inst, uint8 opcode, int startx, int starty, int endx, int endy
 }
 
 void
-ui_rect(rdpInst * inst, int x, int y, int cx, int cy, int colour)
+ui_rect(rdpInst * inst, int x, int y, int cx, int cy, int color)
 {
-	inst->ui_rect(inst, x, y, cx, cy, colour);
+	inst->ui_rect(inst, x, y, cx, cy, color);
 }
 
 void
 ui_polygon(rdpInst * inst, uint8 opcode, uint8 fillmode, RD_POINT * point, int npoints,
-	   RD_BRUSH * brush, int bgcolour, int fgcolour)
+	   RD_BRUSH * brush, int bgcolor, int fgcolor)
 {
-	inst->ui_polygon(inst, opcode, fillmode, point, npoints, brush, bgcolour, fgcolour);
+	inst->ui_polygon(inst, opcode, fillmode, point, npoints, brush, bgcolor, fgcolor);
 }
 
 void
@@ -207,15 +207,15 @@ ui_polyline(rdpInst * inst, uint8 opcode, RD_POINT * points, int npoints, RD_PEN
 
 void
 ui_ellipse(rdpInst * inst, uint8 opcode, uint8 fillmode, int x, int y, int cx, int cy,
-	   RD_BRUSH * brush, int bgcolour, int fgcolour)
+	   RD_BRUSH * brush, int bgcolor, int fgcolor)
 {
-	inst->ui_ellipse(inst, opcode, fillmode, x, y, cx, cy, brush, bgcolour, fgcolour);
+	inst->ui_ellipse(inst, opcode, fillmode, x, y, cx, cy, brush, bgcolor, fgcolor);
 }
 
 void
-ui_start_draw_glyphs(rdpInst * inst, int bgcolour, int fgcolour)
+ui_start_draw_glyphs(rdpInst * inst, int bgcolor, int fgcolor)
 {
-	inst->ui_start_draw_glyphs(inst, bgcolour, fgcolour);
+	inst->ui_start_draw_glyphs(inst, bgcolor, fgcolor);
 }
 
 void
@@ -262,9 +262,9 @@ ui_destblt(rdpInst * inst, uint8 opcode, int x, int y, int cx, int cy)
 
 void
 ui_patblt(rdpInst * inst, uint8 opcode, int x, int y, int cx, int cy, RD_BRUSH * brush,
-	  int bgcolour, int fgcolour)
+	  int bgcolor, int fgcolor)
 {
-	inst->ui_patblt(inst, opcode, x, y, cx, cy, brush, bgcolour, fgcolour);
+	inst->ui_patblt(inst, opcode, x, y, cx, cy, brush, bgcolor, fgcolor);
 }
 
 void
@@ -282,9 +282,9 @@ ui_memblt(rdpInst * inst, uint8 opcode, int x, int y, int cx, int cy, RD_HBITMAP
 
 void
 ui_triblt(rdpInst * inst, uint8 opcode, int x, int y, int cx, int cy, RD_HBITMAP src,
-	  int srcx, int srcy, RD_BRUSH * brush, int bgcolour, int fgcolour)
+	  int srcx, int srcy, RD_BRUSH * brush, int bgcolor, int fgcolor)
 {
-	inst->ui_triblt(inst, opcode, x, y, cx, cy, src, srcx, srcy, brush, bgcolour, fgcolour);
+	inst->ui_triblt(inst, opcode, x, y, cx, cy, src, srcx, srcy, brush, bgcolor, fgcolor);
 }
 
 RD_HGLYPH
@@ -372,10 +372,10 @@ ui_destroy_bitmap(rdpInst * inst, RD_HBITMAP bmp)
 	inst->ui_destroy_bitmap(inst, bmp);
 }
 
-RD_HCOLOURMAP
-ui_create_colourmap(rdpInst * inst, RD_COLOURMAP * colours)
+RD_HPALETTE
+ui_create_colormap(rdpInst * inst, RD_PALETTE * colors)
 {
-	return inst->ui_create_colourmap(inst, colours);
+	return inst->ui_create_colormap(inst, colors);
 }
 
 void
@@ -385,9 +385,9 @@ ui_move_pointer(rdpInst * inst, int x, int y)
 }
 
 void
-ui_set_colourmap(rdpInst * inst, RD_HCOLOURMAP map)
+ui_set_colormap(rdpInst * inst, RD_HPALETTE map)
 {
-	inst->ui_set_colourmap(inst, map);
+	inst->ui_set_colormap(inst, map);
 }
 
 RD_HBITMAP
@@ -474,7 +474,7 @@ l_rdp_check_fds(rdpInst * inst)
 	{
 		rdp->redirect = False;
 		rdp_disconnect(rdp);
-		if (rdp_connect(rdp))
+		if (rdp_reconnect(rdp))
 		{
 			rv = 0;
 		}
@@ -487,7 +487,6 @@ l_rdp_send_input(rdpInst * inst, int message_type, int device_flags,
 	int param1, int param2)
 {
 	rdpRdp * rdp;
-
 	rdp = RDP_FROM_INST(inst);
 	rdp_send_input(rdp, time(NULL), message_type, device_flags, param1, param2);
 	return 0;
@@ -497,7 +496,6 @@ static int
 l_rdp_sync_input(rdpInst * inst, int toggle_flags)
 {
 	rdpRdp * rdp;
-
 	rdp = (rdpRdp *) (inst->rdp);
 	rdp_sync_input(rdp, time(NULL), toggle_flags);
 	return 0;
@@ -521,6 +519,18 @@ l_rdp_disconnect(rdpInst * inst)
 
 	rdp = RDP_FROM_INST(inst);
 	rdp_disconnect(rdp);
+}
+
+RD_BOOL
+freerdp_global_init(void)
+{
+	return rdp_global_init();
+}
+
+void
+freerdp_global_finish(void)
+{
+	rdp_global_finish();
 }
 
 rdpInst *

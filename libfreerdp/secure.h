@@ -28,12 +28,17 @@
 #include "tls.h"
 #endif
 
+RD_BOOL
+sec_global_init(void);
+void
+sec_global_finish(void);
+
 struct rdp_sec
 {
 	struct rdp_rdp * rdp;
 	int rc4_key_len;
-	CRYPTO_RC4 rc4_decrypt_key;
-	CRYPTO_RC4 rc4_encrypt_key;
+	CryptoRc4 rc4_decrypt_key;
+	CryptoRc4 rc4_encrypt_key;
 	uint32 server_public_key_len;
 	uint8 sec_sign_key[16];
 	uint8 sec_decrypt_key[16];
@@ -50,8 +55,8 @@ struct rdp_sec
 	int requested_protocol;
 	int negotiated_protocol;
 	int denied_protocols;
-#ifndef DISABLE_TLS
 	int tls_connected;
+#ifndef DISABLE_TLS
 	SSL *ssl;
 	SSL_CTX *ctx;
 	struct rdp_nla * nla;
@@ -92,6 +97,8 @@ void
 sec_process_mcs_data(rdpSec * sec, STREAM s);
 STREAM
 sec_recv(rdpSec * sec, secRecvType * type);
+void
+sec_out_gcc_conference_create_request(rdpSec * sec, STREAM s);
 RD_BOOL
 sec_connect(rdpSec * sec, char *server, char *username, int port);
 void

@@ -27,7 +27,7 @@
 #include <freerdp/types_ui.h>
 #include <freerdp/constants_ui.h>
 
-#define FREERDP_INTERFACE_VERSION 2
+#define FREERDP_INTERFACE_VERSION 3
 
 #if defined _WIN32 || defined __CYGWIN__
   #ifdef FREERDP_EXPORTS
@@ -55,6 +55,11 @@
 extern "C" {
 #endif
 
+RD_BOOL
+freerdp_global_init(void);
+void
+freerdp_global_finish(void);
+
 struct rdp_inst
 {
 	int version;
@@ -77,9 +82,9 @@ struct rdp_inst
 	int (* rdp_channel_data)(rdpInst * inst, int chan_id, char * data, int data_size);
 	void (* rdp_disconnect)(rdpInst * inst);
 	/* calls from library to ui */
-	void (* ui_error)(rdpInst * inst, char * text);
-	void (* ui_warning)(rdpInst * inst, char * text);
-	void (* ui_unimpl)(rdpInst * inst, char * text);
+	void (* ui_error)(rdpInst * inst, const char * text);
+	void (* ui_warning)(rdpInst * inst, const char * text);
+	void (* ui_unimpl)(rdpInst * inst, const char * text);
 	void (* ui_begin_update)(rdpInst * inst);
 	void (* ui_end_update)(rdpInst * inst);
 	void (* ui_desktop_save)(rdpInst * inst, int offset, int x, int y,
@@ -92,14 +97,14 @@ struct rdp_inst
 	void (* ui_destroy_bitmap)(rdpInst * inst, RD_HBITMAP bmp);
 	void (* ui_line)(rdpInst * inst, uint8 opcode, int startx, int starty, int endx,
 		int endy, RD_PEN * pen);
-	void (* ui_rect)(rdpInst * inst, int x, int y, int cx, int cy, int colour);
+	void (* ui_rect)(rdpInst * inst, int x, int y, int cx, int cy, int color);
 	void (* ui_polygon)(rdpInst * inst, uint8 opcode, uint8 fillmode, RD_POINT * point,
-		int npoints, RD_BRUSH * brush, int bgcolour, int fgcolour);
+		int npoints, RD_BRUSH * brush, int bgcolor, int fgcolor);
 	void (* ui_polyline)(rdpInst * inst, uint8 opcode, RD_POINT * points, int npoints,
 		RD_PEN * pen);
 	void (* ui_ellipse)(rdpInst * inst, uint8 opcode, uint8 fillmode, int x, int y,
-		int cx, int cy, RD_BRUSH * brush, int bgcolour, int fgcolour);
-	void (* ui_start_draw_glyphs)(rdpInst * inst, int bgcolour, int fgcolour);
+		int cx, int cy, RD_BRUSH * brush, int bgcolor, int fgcolor);
+	void (* ui_start_draw_glyphs)(rdpInst * inst, int bgcolor, int fgcolor);
 	void (* ui_draw_glyph)(rdpInst * inst, int x, int y, int cx, int cy,
 		RD_HGLYPH glyph);
 	void (* ui_end_draw_glyphs)(rdpInst * inst, int x, int y, int cx, int cy);
@@ -107,13 +112,13 @@ struct rdp_inst
 	void (* ui_bell)(rdpInst * inst);
 	void (* ui_destblt)(rdpInst * inst, uint8 opcode, int x, int y, int cx, int cy);
 	void (* ui_patblt)(rdpInst * inst, uint8 opcode, int x, int y, int cx, int cy,
-		RD_BRUSH * brush, int bgcolour, int fgcolour);
+		RD_BRUSH * brush, int bgcolor, int fgcolor);
 	void (* ui_screenblt)(rdpInst * inst, uint8 opcode, int x, int y, int cx, int cy,
 		int srcx, int srcy);
 	void (* ui_memblt)(rdpInst * inst, uint8 opcode, int x, int y, int cx, int cy,
 		RD_HBITMAP src, int srcx, int srcy);
 	void (* ui_triblt)(rdpInst * inst, uint8 opcode, int x, int y, int cx, int cy,
-		RD_HBITMAP src, int srcx, int srcy, RD_BRUSH * brush, int bgcolour, int fgcolour);
+		RD_HBITMAP src, int srcx, int srcy, RD_BRUSH * brush, int bgcolor, int fgcolor);
 	RD_HGLYPH (* ui_create_glyph)(rdpInst * inst, int width, int height, uint8 * data);
 	void (* ui_destroy_glyph)(rdpInst * inst, RD_HGLYPH glyph);
 	int (* ui_select)(rdpInst * inst, int rdp_socket);
@@ -126,9 +131,9 @@ struct rdp_inst
 		int width, int height, uint8 * andmask, uint8 * xormask, int bpp);
 	void (* ui_set_null_cursor)(rdpInst * inst);
 	void (* ui_set_default_cursor)(rdpInst * inst);
-	RD_HCOLOURMAP (* ui_create_colourmap)(rdpInst * inst, RD_COLOURMAP * colours);
+	RD_HPALETTE (* ui_create_colormap)(rdpInst * inst, RD_PALETTE * colors);
 	void (* ui_move_pointer)(rdpInst * inst, int x, int y);
-	void (* ui_set_colourmap)(rdpInst * inst, RD_HCOLOURMAP map);
+	void (* ui_set_colormap)(rdpInst * inst, RD_HPALETTE map);
 	RD_HBITMAP (* ui_create_surface)(rdpInst * inst, int width, int height, RD_HBITMAP old);
 	void (* ui_set_surface)(rdpInst * inst, RD_HBITMAP surface);
 	void (* ui_destroy_surface)(rdpInst * inst, RD_HBITMAP surface);
