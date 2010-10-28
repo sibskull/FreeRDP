@@ -95,7 +95,7 @@ rm -f $RPM_BUILD_ROOT%_libdir/{freerdp/,lib}*.{a,la} # FIXME: They shouldn't be 
 %_bindir/dfbfreerdp
 
 %files -n lib%name
-%doc COPYING AUTHORS doc/ipv6.txt doc/ChangeLog
+%doc COPYING AUTHORS doc/ipv6.txt ChangeLog
 %_libdir/lib*.so.*
 %dir %_libdir/freerdp
 %_datadir/freerdp/
