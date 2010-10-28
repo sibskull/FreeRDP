@@ -1,6 +1,6 @@
 Name: freerdp
 Version: 0.8.1
-Release: alt1
+Release: alt2
 License: GPLv2
 Group: Networking/Remote access
 Summary: Remote Desktop Protocol functionality
@@ -8,6 +8,7 @@ Packager: Slava Dubrovskiy <dubrsl@altlinux.ru>
 Url: http://freerdp.sourceforge.net/
 Source: http://downloads.sourceforge.net/%name/%name-%version.tar
 
+Patch1: %name-%version-%release.patch
 BuildRequires: openssl-devel libX11-devel libXcursor-devel cups-devel zlib-devel libalsa-devel libdirectfb-devel libICE-devel libao-devel libsamplerate-devel libpcsclite-devel
 
 Requires: xfreerdp = %version-%release %name-plugins-standard = %version-%release
@@ -74,6 +75,7 @@ sync, disk/printer redirection, etc.
 
 %prep
 %setup -q
+%patch1 -p 1
 echo %version > .tarball-version
 
 %build
@@ -109,6 +111,9 @@ rm -f $RPM_BUILD_ROOT%_libdir/{freerdp/,lib}*.{a,la} # FIXME: They shouldn't be 
 %_libdir/pkgconfig/*
 
 %changelog
+* Thu Oct 28 2010 Mykola Grechukh <gns@altlinux.ru> 0.8.1-alt2
+- added patch
+
 * Thu Oct 28 2010 Mykola Grechukh <gns@altlinux.ru> 0.8.1-alt1
 - new version
 
