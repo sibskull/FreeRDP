@@ -1,6 +1,6 @@
 Name: freerdp
-Version: 0.8.1
-Release: alt2
+Version: 0.8.2
+Release: alt1
 License: GPLv2
 Group: Networking/Remote access
 Summary: Remote Desktop Protocol functionality
@@ -111,6 +111,9 @@ rm -f $RPM_BUILD_ROOT%_libdir/{freerdp/,lib}*.{a,la} # FIXME: They shouldn't be 
 %_libdir/pkgconfig/*
 
 %changelog
+* Mon Nov 15 2010 Slava Dubrovskiy <dubrsl@altlinux.org> 0.8.2-alt1
+- new version
+
 * Thu Oct 28 2010 Mykola Grechukh <gns@altlinux.ru> 0.8.1-alt2
 - added patch
 

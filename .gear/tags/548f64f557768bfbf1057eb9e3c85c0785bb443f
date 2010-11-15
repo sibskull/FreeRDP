@@ -1,0 +1,13 @@
+object e69fbac45ed13b7731a9fe29d6ceb9ef94515c13
+type tag
+tag v0.8.2
+tagger Slava Dubrovskiy <dubrsl@altlinux.ru> 1289813072 +0200
+
+v0.8.2
+-----BEGIN PGP SIGNATURE-----
+Version: GnuPG v1.4.11 (GNU/Linux)
+
+iEYEABECAAYFAkzg/FAACgkQJXEeqgdMrjUTvgCfUdP0gheD4iCKyIHXHw18OjEy
+FIcAn2x6zrDOnazD6ISXgDEABuZNVWPv
+=sdp5
+-----END PGP SIGNATURE-----
