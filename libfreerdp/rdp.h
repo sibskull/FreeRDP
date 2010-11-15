@@ -22,9 +22,8 @@
 #define __RDP_H
 
 #include <time.h>
-
+#include <freerdp/types_ui.h>
 #include "types.h"
-#include "types_ui.h"
 
 RD_BOOL
 rdp_global_init(void);
@@ -50,6 +49,7 @@ struct rdp_rdp
 	struct rdp_pcache * pcache;
 	struct rdp_cache * cache;
 	struct rdp_app * app; // RemoteApp
+	struct rdp_ext * ext;
 	/* Session Directory redirection */
 	int redirect;
 	uint32 redirect_session_id;

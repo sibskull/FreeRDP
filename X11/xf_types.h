@@ -51,6 +51,7 @@ struct xf_info
 	int fullscreen;
 	int fs_toggle;
 	int keyboard_layout_id;
+	int decoration;
 
 	/* X11 stuff */
 	Window wnd;
@@ -92,4 +93,3 @@ typedef struct xf_info xfInfo;
 #endif
 
 #endif
-

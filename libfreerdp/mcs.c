@@ -18,6 +18,7 @@
    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
+#include <freerdp/rdpset.h>
 #include "frdp.h"
 #include "iso.h"
 #include "mcs.h"
@@ -26,7 +27,6 @@
 #include "rdp.h"
 #include "mem.h"
 #include "asn1.h"
-#include "rdpset.h"
 #include "debug.h"
 #include "tcp.h"
 
@@ -68,6 +68,8 @@ mcs_send_connect_initial(rdpMcs * mcs)
 
 	gccCCrq.size = 512;
 	gccCCrq.p = gccCCrq.data = (uint8 *) xmalloc(gccCCrq.size);
+	gccCCrq.end = gccCCrq.data + gccCCrq.size;
+
 	sec_out_gcc_conference_create_request(mcs->sec, &gccCCrq);
 	gccCCrq_length = gccCCrq.end - gccCCrq.data;
 	length = 9 + 3 * 34 + 4 + gccCCrq_length;
@@ -296,13 +298,14 @@ mcs_fp_send(rdpMcs * mcs, STREAM s, uint32 flags)
 
 /* Receive an MCS transport data packet */
 STREAM
-mcs_recv(rdpMcs * mcs, uint16 * channel, isoRecvType * ptype)
+mcs_recv(rdpMcs * mcs, isoRecvType * ptype, uint16 * channel)
 {
 	STREAM s;
 	uint8 byte;
 	uint8 pduType;
 	uint16 length;
 
+	*channel = (uint16)-1;	/* default: bogus value */
 	s = iso_recv(mcs->iso, ptype);
 
 	if (s == NULL)

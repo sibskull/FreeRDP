@@ -19,9 +19,9 @@
    Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 */
 
+#include <freerdp/rdpset.h>
 #include "frdp.h"
 #include "rdp.h"
-#include "rdpset.h"
 #include "tls.h"
 #include "secure.h"
 #include "stream.h"
@@ -33,9 +33,9 @@
 #include <unistd.h>
 #endif
 
-#include "TSRequest.h"
-#include "NegoData.h"
-#include "NegotiationToken.h"
+#include "asn1/TSRequest.h"
+#include "asn1/NegoData.h"
+#include "asn1/NegotiationToken.h"
 
 #include <openssl/des.h>
 #include <openssl/md4.h>
@@ -413,7 +413,7 @@ static void ntlm_input_av_pairs(STREAM s, AV_PAIRS* av_pairs)
 {
 	AV_ID AvId;
 	uint16 AvLen;
-	uint8* value;
+	uint8* value = NULL;
 
 	do
 	{
