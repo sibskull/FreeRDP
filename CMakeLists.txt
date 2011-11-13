@@ -49,7 +49,7 @@ endif()
 
 # Set default libdir
 if(NOT DEFINED CMAKE_INSTALL_LIBDIR)
-	set(CMAKE_INSTALL_LIBDIR "lib")
+	set(CMAKE_INSTALL_LIBDIR "lib${LIB_SUFFIX}")
 endif()
 
 # Set default bindir
