@@ -8,7 +8,7 @@ Packager: Slava Dubrovskiy <dubrsl@altlinux.ru>
 Url: http://freerdp.sourceforge.net/
 Source: http://downloads.sourceforge.net/%name/%name-%version.tar
 
-BuildRequires: cmake CUnit-devel xmlto openssl-devel libX11-devel libXcursor-devel libXdamage-devel libXext-devel libXv-devel libXinerama-devel libxkbfile-devel cups-devel zlib-devel libalsa-devel libdirectfb-devel libICE-devel libao-devel libsamplerate-devel libpcsclite-devel libpulseaudio-devel libavcodec-devel
+BuildRequires: cmake ctest CUnit-devel xmlto openssl-devel libX11-devel libXcursor-devel libXdamage-devel libXext-devel libXv-devel libXinerama-devel libxkbfile-devel cups-devel zlib-devel libalsa-devel libdirectfb-devel libICE-devel libao-devel libsamplerate-devel libpcsclite-devel libpulseaudio-devel libavcodec-devel
 
 Requires: xfreerdp = %version-%release %name-plugins-standard = %version-%release
 
