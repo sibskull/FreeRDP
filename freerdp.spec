@@ -1,14 +1,15 @@
 Name: freerdp
 Version: 1.0
-Release: alt1.beta1
+Release: alt1.beta3
 License: Apache License 2.0
 Group: Networking/Remote access
 Summary: Remote Desktop Protocol functionality
 Packager: Slava Dubrovskiy <dubrsl@altlinux.ru>
 Url: http://freerdp.sourceforge.net/
 Source: http://downloads.sourceforge.net/%name/%name-%version.tar
+Patch: %name-%version-%release.patch
 
-BuildRequires: cmake ctest CUnit-devel xmlto openssl-devel libX11-devel libXcursor-devel libXdamage-devel libXext-devel libXv-devel libXinerama-devel libxkbfile-devel cups-devel zlib-devel libalsa-devel libdirectfb-devel libICE-devel libao-devel libsamplerate-devel libpcsclite-devel libpulseaudio-devel libavcodec-devel
+BuildRequires: cmake ctest xmlto openssl-devel libX11-devel libXcursor-devel libXdamage-devel libXext-devel libXv-devel libXinerama-devel libxkbfile-devel cups-devel zlib-devel libalsa-devel libdirectfb-devel libICE-devel libao-devel libsamplerate-devel libpcsclite-devel libpulseaudio-devel libavcodec-devel
 
 Requires: xfreerdp = %version-%release %name-plugins-standard = %version-%release
 
@@ -70,7 +71,7 @@ sync, disk/printer redirection, etc.
 
 %prep
 %setup -q
-#echo %version > .tarball-version
+%patch -p1
 
 %build
 %cmake	-DWITH_ALSA=ON \
@@ -117,6 +118,9 @@ sync, disk/printer redirection, etc.
 %_libdir/pkgconfig/*
 
 %changelog
+* Sat Dec 10 2011 Slava Dubrovskiy <dubrsl@altlinux.org> 1.0-alt1.beta3
+- new version
+
 * Sat Nov 12 2011 Slava Dubrovskiy <dubrsl@altlinux.org> 1.0-alt1.beta1
 - New version (ALT #24784)
 - Update spec for use cmake
