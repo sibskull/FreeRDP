@@ -65,12 +65,12 @@
 
 #include "xfreerdp.h"
 
-freerdp_sem g_sem;
+static freerdp_sem g_sem;
 static int g_thread_count = 0;
 static uint8 g_disconnect_reason = 0;
 
 static long xv_port = 0;
-const size_t password_size = 512;
+static const size_t password_size = 512;
 
 struct thread_data
 {
@@ -90,28 +90,26 @@ void xf_context_free(freerdp* instance, rdpContext* context)
 
 }
 
-void xf_sw_begin_paint(rdpUpdate* update)
+void xf_sw_begin_paint(rdpContext* context)
 {
-	rdpGdi* gdi = update->context->gdi;
+	rdpGdi* gdi = context->gdi;
 	gdi->primary->hdc->hwnd->invalid->null = 1;
 	gdi->primary->hdc->hwnd->ninvalid = 0;
 }
 
-void xf_sw_end_paint(rdpUpdate* update)
+void xf_sw_end_paint(rdpContext* context)
 {
 	rdpGdi* gdi;
 	xfInfo* xfi;
 	sint32 x, y;
 	uint32 w, h;
-	xfContext* context;
 
-	context = (xfContext*) update->context;
-	gdi = update->context->gdi;
-	xfi = context->xfi;
+	xfi = ((xfContext*) context)->xfi;
+	gdi = context->gdi;
 
-	if (xfi->remote_app != True)
+	if (xfi->remote_app != true)
 	{
-		if (xfi->complex_regions != True)
+		if (xfi->complex_regions != true)
 		{
 			if (gdi->primary->hdc->hwnd->invalid->null)
 				return;
@@ -160,21 +158,21 @@ void xf_sw_end_paint(rdpUpdate* update)
 		w = gdi->primary->hdc->hwnd->invalid->w;
 		h = gdi->primary->hdc->hwnd->invalid->h;
 
-		xf_rail_paint(xfi, update->context->rail, x, y, x + w - 1, y + h - 1);
+		xf_rail_paint(xfi, context->rail, x, y, x + w - 1, y + h - 1);
 	}
 }
 
-void xf_sw_desktop_resize(rdpUpdate* update)
+void xf_sw_desktop_resize(rdpContext* context)
 {
 	xfInfo* xfi;
 	rdpSettings* settings;
 
-	xfi = ((xfContext*) update->context)->xfi;
+	xfi = ((xfContext*) context)->xfi;
 	settings = xfi->instance->settings;
 
-	if (xfi->fullscreen != True)
+	if (xfi->fullscreen != true)
 	{
-		rdpGdi* gdi = update->context->gdi;
+		rdpGdi* gdi = context->gdi;
 		gdi_resize(gdi, xfi->width, xfi->height);
 
 		if (xfi->image)
@@ -187,21 +185,21 @@ void xf_sw_desktop_resize(rdpUpdate* update)
 	}
 }
 
-void xf_hw_begin_paint(rdpUpdate* update)
+void xf_hw_begin_paint(rdpContext* context)
 {
 	xfInfo* xfi;
-	xfi = ((xfContext*) update->context)->xfi;
+	xfi = ((xfContext*) context)->xfi;
 	xfi->hdc->hwnd->invalid->null = 1;
 	xfi->hdc->hwnd->ninvalid = 0;
 }
 
-void xf_hw_end_paint(rdpUpdate* update)
+void xf_hw_end_paint(rdpContext* context)
 {
 	xfInfo* xfi;
 	sint32 x, y;
 	uint32 w, h;
 
-	xfi = ((xfContext*) update->context)->xfi;
+	xfi = ((xfContext*) context)->xfi;
 
 	if (xfi->remote_app)
 	{
@@ -213,20 +211,20 @@ void xf_hw_end_paint(rdpUpdate* update)
 		w = xfi->hdc->hwnd->invalid->w;
 		h = xfi->hdc->hwnd->invalid->h;
 
-		xf_rail_paint(xfi, update->context->rail, x, y, x + w - 1, y + h - 1);
+		xf_rail_paint(xfi, context->rail, x, y, x + w - 1, y + h - 1);
 	}
 }
 
-void xf_hw_desktop_resize(rdpUpdate* update)
+void xf_hw_desktop_resize(rdpContext* context)
 {
 	xfInfo* xfi;
 	boolean same;
 	rdpSettings* settings;
 
-	xfi = ((xfContext*) update->context)->xfi;
+	xfi = ((xfContext*) context)->xfi;
 	settings = xfi->instance->settings;
 
-	if (xfi->fullscreen != True)
+	if (xfi->fullscreen != true)
 	{
 		xfi->width = settings->width;
 		xfi->height = settings->height;
@@ -236,7 +234,7 @@ void xf_hw_desktop_resize(rdpUpdate* update)
 
 		if (xfi->primary)
 		{
-			same = (xfi->primary == xfi->drawing) ? True : False;
+			same = (xfi->primary == xfi->drawing) ? true : false;
 
 			XFreePixmap(xfi->display, xfi->primary);
 
@@ -256,7 +254,7 @@ boolean xf_get_fds(freerdp* instance, void** rfds, int* rcount, void** wfds, int
 	rfds[*rcount] = (void*)(long)(xfi->xfds);
 	(*rcount)++;
 
-	return True;
+	return true;
 }
 
 boolean xf_check_fds(freerdp* instance, fd_set* set)
@@ -269,18 +267,17 @@ boolean xf_check_fds(freerdp* instance, fd_set* set)
 		memset(&xevent, 0, sizeof(xevent));
 		XNextEvent(xfi->display, &xevent);
 
-		if (xf_event_process(instance, &xevent) != True)
-			return False;
+		if (xf_event_process(instance, &xevent) != true)
+			return false;
 	}
 
-	return True;
+	return true;
 }
 
 void xf_create_window(xfInfo* xfi)
 {
 	XEvent xevent;
-	char* title;
-	char* hostname;
+	char* win_title;
 	int width, height;
 
 	width = xfi->width;
@@ -291,8 +288,10 @@ void xf_create_window(xfInfo* xfi)
 	xfi->attribs.backing_store = xfi->primary ? NotUseful : Always;
 	xfi->attribs.override_redirect = xfi->fullscreen;
 	xfi->attribs.colormap = xfi->colormap;
+	xfi->attribs.bit_gravity = ForgetGravity;
+	xfi->attribs.win_gravity = StaticGravity;
 
-	if (xfi->remote_app != True)
+	if (xfi->remote_app != true)
 	{
 		if (xfi->fullscreen)
 		{
@@ -300,12 +299,19 @@ void xf_create_window(xfInfo* xfi)
 			height = xfi->fullscreen ? HeightOfScreen(xfi->screen) : xfi->height;
 		}
 
-		hostname = xfi->instance->settings->hostname;
-		title = xmalloc(sizeof("FreeRDP: ") + strlen(hostname));
-		sprintf(title, "FreeRDP: %s", hostname);
+		if (strlen(xfi->instance->settings->window_title) > 0) {
+			win_title = xmalloc(sizeof(xfi->instance->settings->window_title));
+			sprintf(win_title, "%s", xfi->instance->settings->window_title);
+		} else if (xfi->instance->settings->port == 3389) {
+			win_title = xmalloc(sizeof("FreeRDP: ") + strlen(xfi->instance->settings->hostname));
+			sprintf(win_title, "FreeRDP: %s", xfi->instance->settings->hostname);
+		} else {
+			win_title = xmalloc(sizeof("FreeRDP: ") + strlen(xfi->instance->settings->hostname) + sizeof(":00000"));
+			sprintf(win_title, "FreeRDP: %s:%i", xfi->instance->settings->hostname, xfi->instance->settings->port);
+		}
 
-		xfi->window = xf_CreateDesktopWindow(xfi, title, width, height, xfi->decorations);
-		xfree(title);
+		xfi->window = xf_CreateDesktopWindow(xfi, win_title, width, height, xfi->decorations);
+		xfree(win_title);
 
 		if (xfi->fullscreen)
 			xf_SetWindowFullscreen(xfi, xfi->window, xfi->fullscreen);
@@ -336,7 +342,7 @@ void xf_toggle_fullscreen(xfInfo* xfi)
 	XCopyArea(xfi->display, xfi->primary, contents, xfi->gc, 0, 0, xfi->width, xfi->height, 0, 0);
 
 	XDestroyWindow(xfi->display, xfi->window->handle);
-	xfi->fullscreen = (xfi->fullscreen) ? False : True;
+	xfi->fullscreen = (xfi->fullscreen) ? false : true;
 	xf_create_window(xfi);
 
 	XCopyArea(xfi->display, contents, xfi->primary, xfi->gc, 0, 0, xfi->width, xfi->height, 0, 0);
@@ -384,7 +390,7 @@ boolean xf_get_pixmap_info(xfInfo* xfi)
 	if (vis == NULL)
 	{
 		printf("xf_get_pixmap_info: XGetVisualInfo failed\n");
-		return False;
+		return false;
 	}
 
 	for (i = 0; i < vi_count; i++)
@@ -401,10 +407,10 @@ boolean xf_get_pixmap_info(xfInfo* xfi)
 
 	if ((xfi->visual == NULL) || (xfi->scanline_pad == 0))
 	{
-		return False;
+		return false;
 	}
 
-	return True;
+	return true;
 }
 
 boolean xf_pre_connect(freerdp* instance)
@@ -431,30 +437,30 @@ boolean xf_pre_connect(freerdp* instance)
 	settings = instance->settings;
 	bitmap_cache = settings->bitmap_cache;
 
-	settings->order_support[NEG_DSTBLT_INDEX] = True;
-	settings->order_support[NEG_PATBLT_INDEX] = True;
-	settings->order_support[NEG_SCRBLT_INDEX] = True;
-	settings->order_support[NEG_OPAQUE_RECT_INDEX] = True;
-	settings->order_support[NEG_DRAWNINEGRID_INDEX] = False;
-	settings->order_support[NEG_MULTIDSTBLT_INDEX] = False;
-	settings->order_support[NEG_MULTIPATBLT_INDEX] = False;
-	settings->order_support[NEG_MULTISCRBLT_INDEX] = False;
-	settings->order_support[NEG_MULTIOPAQUERECT_INDEX] = True;
-	settings->order_support[NEG_MULTI_DRAWNINEGRID_INDEX] = False;
-	settings->order_support[NEG_LINETO_INDEX] = True;
-	settings->order_support[NEG_POLYLINE_INDEX] = True;
+	settings->order_support[NEG_DSTBLT_INDEX] = true;
+	settings->order_support[NEG_PATBLT_INDEX] = true;
+	settings->order_support[NEG_SCRBLT_INDEX] = true;
+	settings->order_support[NEG_OPAQUE_RECT_INDEX] = true;
+	settings->order_support[NEG_DRAWNINEGRID_INDEX] = false;
+	settings->order_support[NEG_MULTIDSTBLT_INDEX] = false;
+	settings->order_support[NEG_MULTIPATBLT_INDEX] = false;
+	settings->order_support[NEG_MULTISCRBLT_INDEX] = false;
+	settings->order_support[NEG_MULTIOPAQUERECT_INDEX] = true;
+	settings->order_support[NEG_MULTI_DRAWNINEGRID_INDEX] = false;
+	settings->order_support[NEG_LINETO_INDEX] = true;
+	settings->order_support[NEG_POLYLINE_INDEX] = true;
 	settings->order_support[NEG_MEMBLT_INDEX] = bitmap_cache;
-	settings->order_support[NEG_MEM3BLT_INDEX] = False;
+	settings->order_support[NEG_MEM3BLT_INDEX] = false;
 	settings->order_support[NEG_MEMBLT_V2_INDEX] = bitmap_cache;
-	settings->order_support[NEG_MEM3BLT_V2_INDEX] = False;
-	settings->order_support[NEG_SAVEBITMAP_INDEX] = False;
-	settings->order_support[NEG_GLYPH_INDEX_INDEX] = True;
-	settings->order_support[NEG_FAST_INDEX_INDEX] = True;
-	settings->order_support[NEG_FAST_GLYPH_INDEX] = True;
-	settings->order_support[NEG_POLYGON_SC_INDEX] = False;
-	settings->order_support[NEG_POLYGON_CB_INDEX] = False;
-	settings->order_support[NEG_ELLIPSE_SC_INDEX] = False;
-	settings->order_support[NEG_ELLIPSE_CB_INDEX] = False;
+	settings->order_support[NEG_MEM3BLT_V2_INDEX] = false;
+	settings->order_support[NEG_SAVEBITMAP_INDEX] = false;
+	settings->order_support[NEG_GLYPH_INDEX_INDEX] = true;
+	settings->order_support[NEG_FAST_INDEX_INDEX] = true;
+	settings->order_support[NEG_FAST_GLYPH_INDEX] = true;
+	settings->order_support[NEG_POLYGON_SC_INDEX] = false;
+	settings->order_support[NEG_POLYGON_CB_INDEX] = false;
+	settings->order_support[NEG_ELLIPSE_SC_INDEX] = false;
+	settings->order_support[NEG_ELLIPSE_CB_INDEX] = false;
 
 	freerdp_channels_pre_connect(xfi->_context->channels, instance);
 
@@ -463,27 +469,29 @@ boolean xf_pre_connect(freerdp* instance)
 	if (xfi->display == NULL)
 	{
 		printf("xf_pre_connect: failed to open display: %s\n", XDisplayName(NULL));
-		return False;
+		return false;
 	}
 
-	xfi->_NET_WM_ICON = XInternAtom(xfi->display, "_NET_WM_ICON", False);
-	xfi->_MOTIF_WM_HINTS = XInternAtom(xfi->display, "_MOTIF_WM_HINTS", False);
-	xfi->_NET_CURRENT_DESKTOP = XInternAtom(xfi->display, "_NET_CURRENT_DESKTOP", False);
-	xfi->_NET_WORKAREA = XInternAtom(xfi->display, "_NET_WORKAREA", False);
-	xfi->_NET_WM_STATE = XInternAtom(xfi->display, "_NET_WM_STATE", False);
-	xfi->_NET_WM_STATE_FULLSCREEN = XInternAtom(xfi->display, "_NET_WM_STATE_FULLSCREEN", False);
-	xfi->_NET_WM_WINDOW_TYPE = XInternAtom(xfi->display, "_NET_WM_WINDOW_TYPE", False);
+	xfi->_NET_WM_ICON = XInternAtom(xfi->display, "_NET_WM_ICON", True);
+	xfi->_MOTIF_WM_HINTS = XInternAtom(xfi->display, "_MOTIF_WM_HINTS", True);
+	xfi->_NET_CURRENT_DESKTOP = XInternAtom(xfi->display, "_NET_CURRENT_DESKTOP", True);
+	xfi->_NET_WORKAREA = XInternAtom(xfi->display, "_NET_WORKAREA", True);
+	xfi->_NET_WM_STATE = XInternAtom(xfi->display, "_NET_WM_STATE", True);
+	xfi->_NET_WM_STATE_FULLSCREEN = XInternAtom(xfi->display, "_NET_WM_STATE_FULLSCREEN", True);
+	xfi->_NET_WM_WINDOW_TYPE = XInternAtom(xfi->display, "_NET_WM_WINDOW_TYPE", True);
 
-	xfi->_NET_WM_WINDOW_TYPE_NORMAL = XInternAtom(xfi->display, "_NET_WM_WINDOW_TYPE_NORMAL", False);
-	xfi->_NET_WM_WINDOW_TYPE_DIALOG = XInternAtom(xfi->display, "_NET_WM_WINDOW_TYPE_DIALOG", False);
-	xfi->_NET_WM_WINDOW_TYPE_UTILITY = XInternAtom(xfi->display, "_NET_WM_WINDOW_TYPE_UTILITY", False);
-	xfi->_NET_WM_STATE_SKIP_TASKBAR = XInternAtom(xfi->display, "_NET_WM_STATE_SKIP_TASKBAR", False);
-	xfi->_NET_WM_STATE_SKIP_PAGER = XInternAtom(xfi->display, "_NET_WM_STATE_SKIP_PAGER", False);
+	xfi->_NET_WM_WINDOW_TYPE_NORMAL = XInternAtom(xfi->display, "_NET_WM_WINDOW_TYPE_NORMAL", True);
+	xfi->_NET_WM_WINDOW_TYPE_DIALOG = XInternAtom(xfi->display, "_NET_WM_WINDOW_TYPE_DIALOG", True);
+	xfi->_NET_WM_WINDOW_TYPE_POPUP= XInternAtom(xfi->display, "_NET_WM_WINDOW_TYPE_POPUP", True);
+	xfi->_NET_WM_WINDOW_TYPE_UTILITY = XInternAtom(xfi->display, "_NET_WM_WINDOW_TYPE_UTILITY", True);
+	xfi->_NET_WM_WINDOW_TYPE_DROPDOWN_MENU = XInternAtom(xfi->display, "_NET_WM_WINDOW_TYPE_DROPDOWN_MENU", True);
+	xfi->_NET_WM_STATE_SKIP_TASKBAR = XInternAtom(xfi->display, "_NET_WM_STATE_SKIP_TASKBAR", True);
+	xfi->_NET_WM_STATE_SKIP_PAGER = XInternAtom(xfi->display, "_NET_WM_STATE_SKIP_PAGER", True);
+	xfi->_NET_WM_MOVERESIZE = XInternAtom(xfi->display, "_NET_WM_MOVERESIZE", True);
+	xfi->_NET_MOVERESIZE_WINDOW = XInternAtom(xfi->display, "_NET_MOVERESIZE_WINDOW", True);
 
-	xfi->_NET_WM_MOVERESIZE = XInternAtom(xfi->display, "_NET_WM_MOVERESIZE", False);
-
-	xfi->WM_PROTOCOLS = XInternAtom(xfi->display, "WM_PROTOCOLS", False);
-	xfi->WM_DELETE_WINDOW = XInternAtom(xfi->display, "WM_DELETE_WINDOW", False);
+	xfi->WM_PROTOCOLS = XInternAtom(xfi->display, "WM_PROTOCOLS", True);
+	xfi->WM_DELETE_WINDOW = XInternAtom(xfi->display, "WM_DELETE_WINDOW", True);
 
 	xf_kbd_init(xfi);
 
@@ -502,17 +510,17 @@ boolean xf_pre_connect(freerdp* instance)
 	xfi->big_endian = (ImageByteOrder(xfi->display) == MSBFirst);
 
 	xfi->mouse_motion = settings->mouse_motion;
-	xfi->complex_regions = True;
+	xfi->complex_regions = true;
 	xfi->decorations = settings->decorations;
 	xfi->remote_app = settings->remote_app;
 	xfi->fullscreen = settings->fullscreen;
 	xfi->grab_keyboard = settings->grab_keyboard;
-	xfi->fullscreen_toggle = True;
+	xfi->fullscreen_toggle = true;
 	xfi->sw_gdi = settings->sw_gdi;
 
 	xf_detect_monitors(xfi, settings);
 
-	return True;
+	return true;
 }
 
 void cpuid(unsigned info, unsigned *eax, unsigned *ebx, unsigned *ecx, unsigned *edx)
@@ -559,8 +567,8 @@ boolean xf_post_connect(freerdp* instance)
 	cache = instance->context->cache;
 	channels = xfi->_context->channels;
 
-	if (xf_get_pixmap_info(xfi) != True)
-		return False;
+	if (xf_get_pixmap_info(xfi) != true)
+		return false;
 
 	xf_register_graphics(instance->context->graphics);
 
@@ -661,8 +669,9 @@ boolean xf_post_connect(freerdp* instance)
 
 	pointer_cache_register_callbacks(instance->update);
 
-	if (xfi->sw_gdi != True)
+	if (xfi->sw_gdi != true)
 	{
+		glyph_cache_register_callbacks(instance->update);
 		brush_cache_register_callbacks(instance->update);
 		bitmap_cache_register_callbacks(instance->update);
 		offscreen_cache_register_callbacks(instance->update);
@@ -677,10 +686,10 @@ boolean xf_post_connect(freerdp* instance)
 
 	xf_tsmf_init(xfi, xv_port);
 
-	if (xfi->remote_app != True)
+	if (xfi->remote_app != true)
 		xf_cliprdr_init(xfi, channels);
 
-	return True;
+	return true;
 }
 
 boolean xf_authenticate(freerdp* instance, char** username, char** password, char** domain)
@@ -688,9 +697,9 @@ boolean xf_authenticate(freerdp* instance, char** username, char** password, cha
 	*password = xmalloc(password_size * sizeof(char));
 
 	if (freerdp_passphrase_read("Password: ", *password, password_size) == NULL)
-		return False;
+		return false;
 
-	return True;
+	return true;
 }
 
 boolean xf_verify_certificate(freerdp* instance, char* subject, char* issuer, char* fingerprint)
@@ -711,7 +720,7 @@ boolean xf_verify_certificate(freerdp* instance, char* subject, char* issuer, ch
 
 		if (answer == 'y' || answer == 'Y')
 		{
-			return True;
+			return true;
 		}
 		else if (answer == 'n' || answer == 'N')
 		{
@@ -719,7 +728,7 @@ boolean xf_verify_certificate(freerdp* instance, char* subject, char* issuer, ch
 		}
 	}
 
-	return False;
+	return false;
 }
 
 int xf_process_client_args(rdpSettings* settings, const char* opt, const char* val, void* user_data)
@@ -896,19 +905,19 @@ int xfreerdp_run(freerdp* instance)
 		rcount = 0;
 		wcount = 0;
 
-		if (freerdp_get_fds(instance, rfds, &rcount, wfds, &wcount) != True)
+		if (freerdp_get_fds(instance, rfds, &rcount, wfds, &wcount) != true)
 		{
 			printf("Failed to get FreeRDP file descriptor\n");
 			ret = XF_EXIT_CONN_FAILED;
 			break;
 		}
-		if (freerdp_channels_get_fds(channels, instance, rfds, &rcount, wfds, &wcount) != True)
+		if (freerdp_channels_get_fds(channels, instance, rfds, &rcount, wfds, &wcount) != true)
 		{
 			printf("Failed to get channel manager file descriptor\n");
 			ret = XF_EXIT_CONN_FAILED;
 			break;
 		}
-		if (xf_get_fds(instance, rfds, &rcount, wfds, &wcount) != True)
+		if (xf_get_fds(instance, rfds, &rcount, wfds, &wcount) != true)
 		{
 			printf("Failed to get xfreerdp file descriptor\n");
 			ret = XF_EXIT_CONN_FAILED;
@@ -945,17 +954,17 @@ int xfreerdp_run(freerdp* instance)
 			}
 		}
 
-		if (freerdp_check_fds(instance) != True)
+		if (freerdp_check_fds(instance) != true)
 		{
 			printf("Failed to check FreeRDP file descriptor\n");
 			break;
 		}
-		if (xf_check_fds(instance, &rfds_set) != True)
+		if (xf_check_fds(instance, &rfds_set) != true)
 		{
 			printf("Failed to check xfreerdp file descriptor\n");
 			break;
 		}
-		if (freerdp_channels_check_fds(channels, instance) != True)
+		if (freerdp_channels_check_fds(channels, instance) != true)
 		{
 			printf("Failed to check channel manager file descriptor\n");
 			break;
@@ -970,8 +979,9 @@ int xfreerdp_run(freerdp* instance)
 	freerdp_channels_free(channels);
 	freerdp_disconnect(instance);
 	gdi_free(instance);
-	freerdp_free(instance);
 	xf_free(xfi);
+
+	freerdp_free(instance);
 
 	return ret;
 }
@@ -1044,7 +1054,7 @@ int main(int argc, char* argv[])
 
 	instance->context->argc = argc;
 	instance->context->argv = argv;
-	instance->settings->sw_gdi = False;
+	instance->settings->sw_gdi = false;
 
 	data = (struct thread_data*) xzalloc(sizeof(struct thread_data));
 	data->instance = instance;

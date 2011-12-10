@@ -55,20 +55,20 @@
 
 typedef uint32 PIXEL;
 
-static uint8 g_MaskBit0 = 0x01; /* Least significant bit */
-static uint8 g_MaskBit1 = 0x02;
-static uint8 g_MaskBit2 = 0x04;
-static uint8 g_MaskBit3 = 0x08;
-static uint8 g_MaskBit4 = 0x10;
-static uint8 g_MaskBit5 = 0x20;
-static uint8 g_MaskBit6 = 0x40;
-static uint8 g_MaskBit7 = 0x80; /* Most significant bit */
+static const uint8 g_MaskBit0 = 0x01; /* Least significant bit */
+static const uint8 g_MaskBit1 = 0x02;
+static const uint8 g_MaskBit2 = 0x04;
+static const uint8 g_MaskBit3 = 0x08;
+static const uint8 g_MaskBit4 = 0x10;
+static const uint8 g_MaskBit5 = 0x20;
+static const uint8 g_MaskBit6 = 0x40;
+static const uint8 g_MaskBit7 = 0x80; /* Most significant bit */
 
-static uint8 g_MaskSpecialFgBg1 = 0x03;
-static uint8 g_MaskSpecialFgBg2 = 0x05;
+static const uint8 g_MaskSpecialFgBg1 = 0x03;
+static const uint8 g_MaskSpecialFgBg2 = 0x05;
 
-static uint8 g_MaskRegularRunLength = 0x1F;
-static uint8 g_MaskLiteRunLength = 0x0F;
+static const uint8 g_MaskRegularRunLength = 0x1F;
+static const uint8 g_MaskLiteRunLength = 0x0F;
 
 /**
  * Reads the supplied order header and extracts the compression
@@ -372,7 +372,7 @@ static boolean bitmap_decompress4(uint8* srcData, uint8* dstData, int width, int
 	code = IN_UINT8_MV(srcData);
 	RLE = code & 0x10;
 	if (RLE == 0)
-		return False;
+		return false;
 	total_pro = 1;
 	NA = code & 0x20;
 	if (NA == 0)
@@ -389,7 +389,7 @@ static boolean bitmap_decompress4(uint8* srcData, uint8* dstData, int width, int
 	srcData += bytes_pro;
 	bytes_pro = process_plane(srcData, width, height, dstData + 0, size - total_pro);
 	total_pro += bytes_pro;
-	return (size == total_pro) ? True : False;
+	return (size == total_pro) ? true : false;
 }
 
 /**
@@ -426,7 +426,7 @@ boolean bitmap_decompress(uint8* srcData, uint8* dstData, int width, int height,
 	else if (srcBpp == 32 && dstBpp == 32)
 	{
 		if (!bitmap_decompress4(srcData, dstData, width, height, size))
-			return False;
+			return false;
 	}
 	else if (srcBpp == 15 && dstBpp == 15)
 	{
@@ -451,8 +451,8 @@ boolean bitmap_decompress(uint8* srcData, uint8* dstData, int width, int height,
 	}
 	else
 	{
-		return False;
+		return false;
 	}
 
-	return True;
+	return true;
 }

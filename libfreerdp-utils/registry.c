@@ -21,8 +21,8 @@
 
 #include <freerdp/utils/registry.h>
 
-static char registry_dir[] = "freerdp";
-static char registry_file[] = "config.txt";
+static const char registry_dir[] = "freerdp";
+static const char registry_file[] = "config.txt";
 
 static REG_SECTION global[] =
 {
@@ -134,16 +134,16 @@ void registry_init(rdpRegistry* registry)
 	if (home_path == NULL)
 	{
 		printf("could not get home path\n");
-		registry->available = False;
+		registry->available = false;
 		return;
 	}
 
-	registry->available = True;
+	registry->available = true;
 
 	if (home_path == NULL)
 	{
 		printf("could not get home path\n");
-		registry->available = False;
+		registry->available = false;
 		return;
 	}
 

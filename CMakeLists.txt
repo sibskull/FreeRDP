@@ -34,6 +34,7 @@ include(AutoVersioning)
 include(ConfigOptions)
 include(FindOptionalPackage)
 include(CheckCCompilerFlag)
+include(GNUInstallDirsWrapper)
 
 # Soname versioning - 0.0.0 since it is not being managed yet
 set(FREERDP_VERSION_MAJOR "1")
@@ -45,16 +46,6 @@ set(FREERDP_VERSION_FULL "${FREERDP_VERSION}.${FREERDP_VERSION_PATCH}")
 # Default to release build type
 if(NOT CMAKE_BUILD_TYPE)
    set(CMAKE_BUILD_TYPE "Release")
-endif()
-
-# Set default libdir
-if(NOT DEFINED CMAKE_INSTALL_LIBDIR)
-	set(CMAKE_INSTALL_LIBDIR "lib${LIB_SUFFIX}")
-endif()
-
-# Set default bindir
-if(NOT DEFINED CMAKE_INSTALL_BINDIR)
-	set(CMAKE_INSTALL_BINDIR "bin")
 endif()
 
 # build shared libs
@@ -99,17 +90,31 @@ check_include_files(sys/socket.h HAVE_SYS_SOCKET_H)
 check_include_files(netdb.h HAVE_NETDB_H)
 check_include_files(fcntl.h HAVE_FCNTL_H)
 check_include_files(unistd.h HAVE_UNISTD_H)
+check_include_files(limits.h HAVE_LIMITS_H)
+check_include_files(stdint.h HAVE_STDINT_H)
+check_include_files(stdbool.h HAVE_STDBOOL_H)
+check_include_files(inttypes.h HAVE_INTTYPES_H)
 
 # Libraries that we have a hard dependency on
 find_required_package(OpenSSL)
 
+# Mac OS X
+if(APPLE)
+	include_directories(/opt/local/include)
+	link_directories(/opt/local/lib)
+	set(CMAKE_SHARED_LINKER_FLAGS "-mmacosx-version-min=10.4")
+endif()
+
 if(NOT WIN32)
 	find_required_package(ZLIB)
-	find_suggested_package(ALSA)
 	find_optional_package(PulseAudio)
 	find_optional_package(PCSC)
 	find_suggested_package(Cups)
 	find_suggested_package(FFmpeg)
+
+	if(NOT APPLE)
+		find_suggested_package(ALSA)
+	endif()
 endif()
 
 # Endian
@@ -131,12 +136,6 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/config.h.in ${CMAKE_CURRENT_BINARY_DI
 # Generate pkg-config
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/freerdp.pc.in ${CMAKE_CURRENT_BINARY_DIR}/freerdp.pc @ONLY)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/freerdp.pc DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
-
-# Mac OS X
-if(APPLE)
-	include_directories(/opt/local/include)
-	link_directories(/opt/local/lib)
-endif()
 
 # Build CUnit
 find_optional_package(CUnit)
