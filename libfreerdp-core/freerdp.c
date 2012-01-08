@@ -31,13 +31,19 @@
 boolean freerdp_connect(freerdp* instance)
 {
 	rdpRdp* rdp;
-	boolean status;
+	boolean status = false;
 
 	rdp = instance->context->rdp;
 
 	extension_pre_connect(rdp->extension);
 
-	IFCALL(instance->PreConnect, instance);
+	IFCALLRET(instance->PreConnect, status, instance);
+
+	if (status != true)
+	{
+		printf("freerdp_pre_connect failed\n");
+		return false;
+	}
 
 	status = rdp_client_connect(rdp);
 
@@ -52,7 +58,15 @@ boolean freerdp_connect(freerdp* instance)
 
 		extension_post_connect(rdp->extension);
 
-		IFCALL(instance->PostConnect, instance);
+		input_register_client_callbacks(rdp->input);
+
+		IFCALLRET(instance->PostConnect, status, instance);
+
+		if (status != true)
+		{
+			printf("freerdp_post_connect failed\n");
+			return false;
+		}
 
 		if (instance->settings->play_rfx)
 		{
@@ -115,6 +129,11 @@ boolean freerdp_check_fds(freerdp* instance)
 	return true;
 }
 
+void freerdp_send_keep_alive(freerdp* instance)
+{
+	input_send_synchronize_event(instance->context->rdp->input, 0);
+}
+
 static int freerdp_send_channel_data(freerdp* instance, int channel_id, uint8* data, int size)
 {
 	return rdp_send_channel_data(instance->context->rdp, channel_id, data, size);
@@ -151,7 +170,6 @@ void freerdp_context_new(freerdp* instance)
 	instance->update->altsec->context = instance->context;
 
 	instance->input->context = instance->context;
-	input_register_client_callbacks(rdp->input);
 
 	IFCALL(instance->ContextNew, instance, instance->context);
 }

@@ -19,6 +19,7 @@
 
 #include <freerdp/utils/stream.h>
 #include <freerdp/utils/memory.h>
+#include <freerdp/codec/color.h>
 
 #include <freerdp/codec/bitmap.h>
 
@@ -250,10 +251,10 @@ static uint32 ExtractRunLength(uint32 code, uint8* pbOrderHdr, uint32* advance)
 #define IN_UINT8_MV(_p) (*((_p)++))
 
 /**
- * decompress a color plane
+ * decompress an RLE color plane
  * RDP6_BITMAP_STREAM
  */
-static int process_plane(uint8* in, int width, int height, uint8* out, int size)
+static int process_rle_plane(uint8* in, int width, int height, uint8* out, int size)
 {
 	int indexw;
 	int indexh;
@@ -358,70 +359,88 @@ static int process_plane(uint8* in, int width, int height, uint8* out, int size)
 }
 
 /**
+ * process a raw color plane
+ */
+static int process_raw_plane(uint8* srcData, int width, int height, uint8* dstData, int size)
+{
+	int x, y;
+
+	for (y = 0; y < height; y++)
+	{
+		for (x = 0; x < width; x++)
+		{
+			dstData[(((height - y - 1) * width) + x) * 4] = srcData[((y * width) + x)];
+		}
+	}
+
+	return (width * height);
+}
+
+/**
  * 4 byte bitmap decompress
  * RDP6_BITMAP_STREAM
  */
 static boolean bitmap_decompress4(uint8* srcData, uint8* dstData, int width, int height, int size)
 {
-	int code;
-	int bytes_pro;
-	int total_pro;
 	int RLE;
-	int NA; /* no alpha */
+	int code;
+	int NoAlpha;
+	int bytes_processed;
+	int total_processed;
 
 	code = IN_UINT8_MV(srcData);
 	RLE = code & 0x10;
-	if (RLE == 0)
-		return false;
-	total_pro = 1;
-	NA = code & 0x20;
-	if (NA == 0)
+
+	total_processed = 1;
+	NoAlpha = code & 0x20;
+
+	if (NoAlpha == 0)
 	{
-		bytes_pro = process_plane(srcData, width, height, dstData + 3, size - total_pro);
-		total_pro += bytes_pro;
-		srcData += bytes_pro;
+		bytes_processed = process_rle_plane(srcData, width, height, dstData + 3, size - total_processed);
+		total_processed += bytes_processed;
+		srcData += bytes_processed;
 	}
-	bytes_pro = process_plane(srcData, width, height, dstData + 2, size - total_pro);
-	total_pro += bytes_pro;
-	srcData += bytes_pro;
-	bytes_pro = process_plane(srcData, width, height, dstData + 1, size - total_pro);
-	total_pro += bytes_pro;
-	srcData += bytes_pro;
-	bytes_pro = process_plane(srcData, width, height, dstData + 0, size - total_pro);
-	total_pro += bytes_pro;
-	return (size == total_pro) ? true : false;
+
+	if (RLE != 0)
+	{
+		bytes_processed = process_rle_plane(srcData, width, height, dstData + 2, size - total_processed);
+		total_processed += bytes_processed;
+		srcData += bytes_processed;
+
+		bytes_processed = process_rle_plane(srcData, width, height, dstData + 1, size - total_processed);
+		total_processed += bytes_processed;
+		srcData += bytes_processed;
+
+		bytes_processed = process_rle_plane(srcData, width, height, dstData + 0, size - total_processed);
+		total_processed += bytes_processed;
+	}
+	else
+	{
+		bytes_processed = process_raw_plane(srcData, width, height, dstData + 2, size - total_processed);
+		total_processed += bytes_processed;
+		srcData += bytes_processed;
+
+		bytes_processed = process_raw_plane(srcData, width, height, dstData + 1, size - total_processed);
+		total_processed += bytes_processed;
+		srcData += bytes_processed;
+
+		bytes_processed = process_raw_plane(srcData, width, height, dstData + 0, size - total_processed);
+		total_processed += bytes_processed + 1;
+	}
+
+	return (size == total_processed) ? true : false;
 }
 
-/**
- * bitmap flip
- */
-static int bitmap_flip(uint8* src, uint8* dst, int delta, int height)
-{
-	int index;
-
-	dst = (dst + delta * height) - delta;
-	for (index = 0; index < height; index++)
-	{
-		memcpy(dst, src, delta);
-		src += delta;
-		dst -= delta;
-	}
-	return 0;
-}
 
 /**
  * bitmap decompression routine
  */
 boolean bitmap_decompress(uint8* srcData, uint8* dstData, int width, int height, int size, int srcBpp, int dstBpp)
 {
-	uint8* data;
-
 	if (srcBpp == 16 && dstBpp == 16)
 	{
-		data = (uint8*) xmalloc(width * height * 2);
-		RleDecompress16to16(srcData, size, data, width * 2, width, height);
-		bitmap_flip(data, dstData, width * 2, height);
-		xfree(data);
+		RleDecompress16to16(srcData, size, dstData, width * 2, width, height);
+		freerdp_bitmap_flip(dstData, dstData, width * 2, height);
 	}
 	else if (srcBpp == 32 && dstBpp == 32)
 	{
@@ -430,24 +449,18 @@ boolean bitmap_decompress(uint8* srcData, uint8* dstData, int width, int height,
 	}
 	else if (srcBpp == 15 && dstBpp == 15)
 	{
-		data = (uint8*) xmalloc(width * height * 2);
-		RleDecompress16to16(srcData, size, data, width * 2, width, height);
-		bitmap_flip(data, dstData, width * 2, height);
-		xfree(data);
+		RleDecompress16to16(srcData, size, dstData, width * 2, width, height);
+		freerdp_bitmap_flip(dstData, dstData, width * 2, height);
 	}
 	else if (srcBpp == 8 && dstBpp == 8)
 	{
-		data = (uint8*) xmalloc(width * height);
-		RleDecompress8to8(srcData, size, data, width, width, height);
-		bitmap_flip(data, dstData, width, height);
-		xfree(data);
+		RleDecompress8to8(srcData, size, dstData, width, width, height);
+		freerdp_bitmap_flip(dstData, dstData, width, height);
 	}
 	else if (srcBpp == 24 && dstBpp == 24)
 	{
-		data = (uint8*) xmalloc(width * height * 3);
-		RleDecompress24to24(srcData, size, data, width * 3, width, height);
-		bitmap_flip(data, dstData, width * 3, height);
-		xfree(data);
+		RleDecompress24to24(srcData, size, dstData, width * 3, width, height);
+		freerdp_bitmap_flip(dstData, dstData, width * 3, height);
 	}
 	else
 	{
