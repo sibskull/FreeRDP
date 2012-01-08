@@ -1,2 +1,2 @@
-tar: @version@-beta3:.
-diff: @version@-beta3:. .
+tar: @version@-beta5:.
+diff: @version@-beta5:. .

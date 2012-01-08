@@ -1,6 +1,6 @@
 Name: freerdp
 Version: 1.0
-Release: alt1.beta3
+Release: alt1.beta5
 License: Apache License 2.0
 Group: Networking/Remote access
 Summary: Remote Desktop Protocol functionality
@@ -118,6 +118,9 @@ sync, disk/printer redirection, etc.
 %_libdir/pkgconfig/*
 
 %changelog
+* Sun Jan 08 2012 Slava Dubrovskiy <dubrsl@altlinux.org> 1.0-alt1.beta5
+- new version
+
 * Sat Dec 10 2011 Slava Dubrovskiy <dubrsl@altlinux.org> 1.0-alt1.beta3
 - new version
 
