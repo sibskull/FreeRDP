@@ -168,6 +168,8 @@ boolean wf_pre_connect(freerdp* instance)
 	settings->order_support[NEG_ELLIPSE_SC_INDEX] = false;
 	settings->order_support[NEG_ELLIPSE_CB_INDEX] = false;
 
+	settings->glyph_cache = false;
+
 	wfi->cursor = g_default_cursor;
 
 	wfi->fullscreen = settings->fullscreen;
@@ -175,8 +177,8 @@ boolean wf_pre_connect(freerdp* instance)
 	wfi->sw_gdi = settings->sw_gdi;
 
 	wfi->clrconv = (HCLRCONV) xzalloc(sizeof(CLRCONV));
-	wfi->clrconv->alpha = 1;
 	wfi->clrconv->palette = NULL;
+	wfi->clrconv->alpha = 0;
 
 	instance->context->cache = cache_new(settings);
 
@@ -570,7 +572,7 @@ static DWORD WINAPI kbd_thread_func(LPVOID lpParam)
 
 	if (hook_handle)
 	{
-		while( (status = GetMessage( &msg, NULL, 0, 0 )) != 0)
+		while ((status = GetMessage( &msg, NULL, 0, 0 )) != 0)
 		{
 			if (status == -1)
 			{
@@ -597,6 +599,14 @@ INT WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 	thread_data* data;
 	WSADATA wsa_data;
 	WNDCLASSEX wnd_cls;
+
+	if (NULL == getenv("HOME"))
+	{
+		char home[MAX_PATH * 2] = "HOME=";
+		strcat(home, getenv("HOMEDRIVE"));
+		strcat(home, getenv("HOMEPATH"));
+		_putenv(home);
+	}
 
 	if (WSAStartup(0x101, &wsa_data) != 0)
 		return 1;

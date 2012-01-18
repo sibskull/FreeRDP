@@ -293,17 +293,16 @@ void xf_create_window(xfInfo* xfi)
 
 	if (xfi->instance->settings->window_title != NULL)
 	{
-		win_title = xmalloc(sizeof(xfi->instance->settings->window_title));
-		sprintf(win_title, "%s", xfi->instance->settings->window_title);
+		win_title = xstrdup(xfi->instance->settings->window_title);
 	}
 	else if (xfi->instance->settings->port == 3389)
 	{
-		win_title = xmalloc(sizeof("FreeRDP: ") + strlen(xfi->instance->settings->hostname));
+		win_title = xmalloc(1 + sizeof("FreeRDP: ") + strlen(xfi->instance->settings->hostname));
 		sprintf(win_title, "FreeRDP: %s", xfi->instance->settings->hostname);
 	}
 	else
 	{
-		win_title = xmalloc(sizeof("FreeRDP: ") + strlen(xfi->instance->settings->hostname) + sizeof(":00000"));
+		win_title = xmalloc(1 + sizeof("FreeRDP: ") + strlen(xfi->instance->settings->hostname) + sizeof(":00000"));
 		sprintf(win_title, "FreeRDP: %s:%i", xfi->instance->settings->hostname, xfi->instance->settings->port);
 	}
 
@@ -456,7 +455,8 @@ boolean xf_pre_connect(freerdp* instance)
 	xfInfo* xfi;
 	boolean bitmap_cache;
 	rdpSettings* settings;
-
+	int arg_parse_result;
+	
 	xfi = (xfInfo*) xzalloc(sizeof(xfInfo));
 	((xfContext*) instance->context)->xfi = xfi;
 
@@ -464,11 +464,15 @@ boolean xf_pre_connect(freerdp* instance)
 	xfi->context = (xfContext*) instance->context;
 	xfi->context->settings = instance->settings;
 	xfi->instance = instance;
-
-	if (freerdp_parse_args(instance->settings, instance->context->argc, instance->context->argv,
-			xf_process_plugin_args, instance->context->channels, xf_process_client_args, xfi) < 0)
+	
+	arg_parse_result = freerdp_parse_args(instance->settings, instance->context->argc,instance->context->argv,
+				xf_process_plugin_args, instance->context->channels, xf_process_client_args, xfi);
+	
+	if (arg_parse_result < 0)
 	{
-		printf("failed to parse arguments.\n");
+		if (arg_parse_result == FREERDP_ARGS_PARSE_FAILURE)
+			printf("failed to parse arguments.\n");
+		
 		exit(XF_EXIT_PARSE_ARGUMENTS);
 	}
 

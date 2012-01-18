@@ -125,6 +125,7 @@ boolean rdp_read_share_data_header(STREAM* s, uint16* length, uint8* type, uint3
 	stream_seek_uint8(s); /* streamId (1 byte) */
 	stream_read_uint16(s, *length); /* uncompressedLength (2 bytes) */
 	stream_read_uint8(s, *type); /* pduType2, Data PDU Type (1 byte) */
+
 	if (*type & 0x80) 
 	{
 		stream_read_uint8(s, *compressed_type); /* compressedType (1 byte) */
@@ -280,9 +281,11 @@ static uint32 rdp_security_stream_out(rdpRdp* rdp, STREAM* s, int length)
 	uint32 pad = 0;
 
 	sec_flags = rdp->sec_flags;
+
 	if (sec_flags != 0)
 	{
 		rdp_write_security_header(s, sec_flags);
+
 		if (sec_flags & SEC_ENCRYPT)
 		{
 			if (rdp->settings->encryption_method == ENCRYPTION_METHOD_FIPS)
@@ -292,12 +295,15 @@ static uint32 rdp_security_stream_out(rdpRdp* rdp, STREAM* s, int length)
 				length = length - (data - s->data);
 				stream_write_uint16(s, 0x10); /* length */
 				stream_write_uint8(s, 0x1); /* TSFIPS_VERSION 1*/
+
 				/* handle padding */
 				pad = 8 - (length % 8);
+
 				if (pad == 8)
 					pad = 0;
 				if (pad)
 					memset(data+length, 0, pad);
+
 				stream_write_uint8(s, pad);
 
 				security_hmac_signature(data, length, s->p, rdp);
@@ -316,8 +322,10 @@ static uint32 rdp_security_stream_out(rdpRdp* rdp, STREAM* s, int length)
 				security_encrypt(s->p, length, rdp);
 			}
 		}
+
 		rdp->sec_flags = 0;
 	}
+
 	return pad;
 }
 
@@ -328,13 +336,19 @@ static uint32 rdp_get_sec_bytes(rdpRdp* rdp)
 	if (rdp->sec_flags & SEC_ENCRYPT)
 	{
 		sec_bytes = 12;
+
 		if (rdp->settings->encryption_method == ENCRYPTION_METHOD_FIPS)
 			sec_bytes += 4;
 	}
 	else if (rdp->sec_flags != 0)
+	{
 		sec_bytes = 4;
+	}
 	else
+	{
 		sec_bytes = 0;
+	}
+
 	return sec_bytes;
 }
 
@@ -385,7 +399,7 @@ boolean rdp_send_pdu(rdpRdp* rdp, STREAM* s, uint16 type, uint16 channel_id)
 	sec_hold = s->p;
 	stream_seek(s, sec_bytes);
 
-	rdp_write_share_control_header(s, length, type, channel_id);
+	rdp_write_share_control_header(s, length - sec_bytes, type, channel_id);
 
 	s->p = sec_hold;
 	length += rdp_security_stream_out(rdp, s, length);
@@ -412,8 +426,8 @@ boolean rdp_send_data_pdu(rdpRdp* rdp, STREAM* s, uint8 type, uint16 channel_id)
 	sec_hold = s->p;
 	stream_seek(s, sec_bytes);
 
-	rdp_write_share_control_header(s, length, PDU_TYPE_DATA, channel_id);
-	rdp_write_share_data_header(s, length, type, rdp->settings->share_id);
+	rdp_write_share_control_header(s, length - sec_bytes, PDU_TYPE_DATA, channel_id);
+	rdp_write_share_data_header(s, length - sec_bytes, type, rdp->settings->share_id);
 
 	s->p = sec_hold;
 	length += rdp_security_stream_out(rdp, s, length);
@@ -466,7 +480,7 @@ void rdp_recv_data_pdu(rdpRdp* rdp, STREAM* s)
 			break;
 
 		case DATA_PDU_TYPE_SYNCHRONIZE:
-			rdp_recv_server_synchronize_pdu(rdp, s);
+			rdp_recv_synchronize_pdu(rdp, s);
 			break;
 
 		case DATA_PDU_TYPE_REFRESH_RECT:
@@ -493,7 +507,7 @@ void rdp_recv_data_pdu(rdpRdp* rdp, STREAM* s)
 			break;
 
 		case DATA_PDU_TYPE_FONT_MAP:
-			rdp_recv_server_font_map_pdu(rdp, s);
+			rdp_recv_font_map_pdu(rdp, s);
 			break;
 
 		case DATA_PDU_TYPE_SET_KEYBOARD_INDICATORS:
@@ -568,7 +582,9 @@ boolean rdp_recv_out_of_sequence_pdu(rdpRdp* rdp, STREAM* s)
 
 boolean rdp_decrypt(rdpRdp* rdp, STREAM* s, int length)
 {
-	int cryptlen;
+	uint8 cmac[8], wmac[8];
+	uint32 ml;
+	uint8* mk;
 
 	if (rdp->settings->encryption_method == ENCRYPTION_METHOD_FIPS)
 	{
@@ -583,15 +599,15 @@ boolean rdp_decrypt(rdpRdp* rdp, STREAM* s, int length)
 		sig = s->p;
 		stream_seek(s, 8);	/* signature */
 
-		cryptlen = length - 12;
+		length -= 12;
 
-		if (!security_fips_decrypt(s->p, cryptlen, rdp))
+		if (!security_fips_decrypt(s->p, length, rdp))
 		{
 			printf("FATAL: cannot decrypt\n");
 			return false; /* TODO */
 		}
 
-		if (!security_fips_check_signature(s->p, cryptlen-pad, sig, rdp))
+		if (!security_fips_check_signature(s->p, length - pad, sig, rdp))
 		{
 			printf("FATAL: invalid packet signature\n");
 			return false; /* TODO */
@@ -602,9 +618,16 @@ boolean rdp_decrypt(rdpRdp* rdp, STREAM* s, int length)
 		return true;
 	}
 
-	stream_seek(s, 8); /* signature */
-	cryptlen = length - 8;
-	security_decrypt(s->p, cryptlen, rdp);
+	stream_read(s, wmac, sizeof(wmac));
+	length -= sizeof(wmac);
+	security_decrypt(s->p, length, rdp);
+	mk = rdp->sign_key;
+	ml = rdp->rc4_key_len;
+	security_mac_signature(mk, ml, s->p, length, cmac);
+	if (memcmp(wmac, cmac, sizeof(wmac)) != 0) {
+		printf("FATAL: invalid packet signature\n");
+		return false;
+	}
 	return true;
 }
 

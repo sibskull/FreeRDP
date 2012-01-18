@@ -58,8 +58,6 @@ boolean freerdp_connect(freerdp* instance)
 
 		extension_post_connect(rdp->extension);
 
-		input_register_client_callbacks(rdp->input);
-
 		IFCALLRET(instance->PostConnect, status, instance);
 
 		if (status != true)
@@ -147,6 +145,18 @@ boolean freerdp_disconnect(freerdp* instance)
 	transport_disconnect(rdp->transport);
 
 	return true;
+}
+
+void freerdp_get_version(int* major, int* minor, int* revision)
+{
+	if (major != NULL)
+		*major = FREERDP_VERSION_MAJOR;
+
+	if (minor != NULL)
+		*minor = FREERDP_VERSION_MINOR;
+
+	if (revision != NULL)
+		*revision = FREERDP_VERSION_REVISION;
 }
 
 void freerdp_context_new(freerdp* instance)

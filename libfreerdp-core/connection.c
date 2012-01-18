@@ -17,9 +17,11 @@
  * limitations under the License.
  */
 
-#include "connection.h"
-#include "info.h"
 #include "per.h"
+#include "info.h"
+#include "input.h"
+
+#include "connection.h"
 
 /**
  *                                      Connection Sequence
@@ -217,8 +219,7 @@ static boolean rdp_establish_keys(rdpRdp* rdp)
 	stream_write_uint32(s, 1); /* SEC_CLIENT_RANDOM */
 	length = key_len + 8;
 	stream_write_uint32(s, length);
-	memcpy(s->p, crypt_client_random, length);
-	stream_seek(s, length);
+	stream_write(s, crypt_client_random, length);
 	if (transport_write(rdp->mcs->transport, s) < 0)
 	{
 		return false;
@@ -388,6 +389,8 @@ boolean rdp_client_connect_demand_active(rdpRdp* rdp, STREAM* s)
 	if (!rdp_send_confirm_active(rdp))
 		return false;
 
+	input_register_client_callbacks(rdp->input);
+
 	/**
 	 * The server may request a different desktop size during Deactivation-Reactivation sequence.
 	 * In this case, the UI should be informed and do actual window resizing at this point.
@@ -419,6 +422,9 @@ boolean rdp_client_connect_finalize(rdpRdp* rdp)
 		return false;
 	if (!rdp_send_client_control_pdu(rdp, CTRLACTION_REQUEST_CONTROL))
 		return false;
+
+	rdp->input->SynchronizeEvent(rdp->input, 0);
+
 	if (!rdp_send_client_persistent_key_list_pdu(rdp))
 		return false;
 	if (!rdp_send_client_font_list_pdu(rdp, FONTLIST_FIRST | FONTLIST_LAST))

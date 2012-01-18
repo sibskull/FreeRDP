@@ -79,7 +79,7 @@ uint8* rdp_capability_set_start(STREAM* s)
 	uint8* header;
 
 	stream_get_mark(s, header);
-	stream_seek(s, CAPSET_HEADER_LENGTH);
+	stream_write_zero(s, CAPSET_HEADER_LENGTH);
 
 	return header;
 }
@@ -87,11 +87,14 @@ uint8* rdp_capability_set_start(STREAM* s)
 void rdp_capability_set_finish(STREAM* s, uint8* header, uint16 type)
 {
 	uint16 length;
+	uint8* footer;
 
-	length = s->p - header;
+	footer = s->p;
+	length = footer - header;
 	stream_set_mark(s, header);
+
 	rdp_write_capability_set_header(s, length, type);
-	stream_set_mark(s, header + length);
+	stream_set_mark(s, footer);
 }
 
 /**
@@ -858,18 +861,18 @@ void rdp_write_glyph_cache_capability_set(STREAM* s, rdpSettings* settings)
 	header = rdp_capability_set_start(s);
 
 	/* glyphCache (40 bytes) */
-	rdp_write_cache_definition(s, &settings->glyphCache[0]); /* glyphCache0 (4 bytes) */
-	rdp_write_cache_definition(s, &settings->glyphCache[1]); /* glyphCache1 (4 bytes) */
-	rdp_write_cache_definition(s, &settings->glyphCache[2]); /* glyphCache2 (4 bytes) */
-	rdp_write_cache_definition(s, &settings->glyphCache[3]); /* glyphCache3 (4 bytes) */
-	rdp_write_cache_definition(s, &settings->glyphCache[4]); /* glyphCache4 (4 bytes) */
-	rdp_write_cache_definition(s, &settings->glyphCache[5]); /* glyphCache5 (4 bytes) */
-	rdp_write_cache_definition(s, &settings->glyphCache[6]); /* glyphCache6 (4 bytes) */
-	rdp_write_cache_definition(s, &settings->glyphCache[7]); /* glyphCache7 (4 bytes) */
-	rdp_write_cache_definition(s, &settings->glyphCache[8]); /* glyphCache8 (4 bytes) */
-	rdp_write_cache_definition(s, &settings->glyphCache[9]); /* glyphCache9 (4 bytes) */
+	rdp_write_cache_definition(s, &(settings->glyphCache[0])); /* glyphCache0 (4 bytes) */
+	rdp_write_cache_definition(s, &(settings->glyphCache[1])); /* glyphCache1 (4 bytes) */
+	rdp_write_cache_definition(s, &(settings->glyphCache[2])); /* glyphCache2 (4 bytes) */
+	rdp_write_cache_definition(s, &(settings->glyphCache[3])); /* glyphCache3 (4 bytes) */
+	rdp_write_cache_definition(s, &(settings->glyphCache[4])); /* glyphCache4 (4 bytes) */
+	rdp_write_cache_definition(s, &(settings->glyphCache[5])); /* glyphCache5 (4 bytes) */
+	rdp_write_cache_definition(s, &(settings->glyphCache[6])); /* glyphCache6 (4 bytes) */
+	rdp_write_cache_definition(s, &(settings->glyphCache[7])); /* glyphCache7 (4 bytes) */
+	rdp_write_cache_definition(s, &(settings->glyphCache[8])); /* glyphCache8 (4 bytes) */
+	rdp_write_cache_definition(s, &(settings->glyphCache[9])); /* glyphCache9 (4 bytes) */
 
-	rdp_write_cache_definition(s, &settings->fragCache);  /* fragCache (4 bytes) */
+	rdp_write_cache_definition(s, settings->fragCache);  /* fragCache (4 bytes) */
 
 	stream_write_uint16(s, settings->glyphSupportLevel); /* glyphSupportLevel (2 bytes) */
 
@@ -1106,9 +1109,9 @@ void rdp_write_draw_nine_grid_cache_capability_set(STREAM* s, rdpSettings* setti
 
 	drawNineGridSupportLevel = (settings->draw_nine_grid) ? DRAW_NINEGRID_SUPPORTED : DRAW_NINEGRID_NO_SUPPORT;
 
-	stream_read_uint32(s, drawNineGridSupportLevel); /* drawNineGridSupportLevel (4 bytes) */
-	stream_read_uint16(s, settings->draw_nine_grid_cache_size); /* drawNineGridCacheSize (2 bytes) */
-	stream_read_uint16(s, settings->draw_nine_grid_cache_entries); /* drawNineGridCacheEntries (2 bytes) */
+	stream_write_uint32(s, drawNineGridSupportLevel); /* drawNineGridSupportLevel (4 bytes) */
+	stream_write_uint16(s, settings->draw_nine_grid_cache_size); /* drawNineGridCacheSize (2 bytes) */
+	stream_write_uint16(s, settings->draw_nine_grid_cache_entries); /* drawNineGridCacheEntries (2 bytes) */
 
 	rdp_capability_set_finish(s, header, CAPSET_TYPE_DRAW_NINE_GRID_CACHE);
 }
