@@ -26,6 +26,7 @@
 #endif
 
 #include <freerdp/settings.h>
+#include <freerdp/utils/file.h>
 
 static const char client_dll[] = "C:\\Windows\\System32\\mstscax.dll";
 
@@ -56,6 +57,7 @@ rdpSettings* settings_new(void* instance)
 		settings->kbd_fn_keys = 0;
 		settings->kbd_layout = 0;
 		settings->encryption = false;
+		settings->secure_checksum = false;
 		settings->port = 3389;
 		settings->desktop_resize = true;
 
@@ -170,9 +172,10 @@ rdpSettings* settings_new(void* instance)
 		settings->server_auto_reconnect_cookie = xnew(ARC_SC_PRIVATE_PACKET);
 
 		settings->client_time_zone = xnew(TIME_ZONE_INFO);
-
 		settings->server_random = xnew(rdpBlob);
 		settings->server_certificate = xnew(rdpBlob);
+
+		freerdp_detect_paths(settings);
 	}
 
 	return settings;
@@ -197,6 +200,7 @@ void settings_free(rdpSettings* settings)
 		freerdp_blob_free(settings->server_certificate);
 		xfree(settings->server_random);
 		xfree(settings->server_certificate);
+		xfree(settings->rdp_key_file);
 		certificate_free(settings->server_cert);
 		xfree(settings->client_auto_reconnect_cookie);
 		xfree(settings->server_auto_reconnect_cookie);
@@ -204,6 +208,10 @@ void settings_free(rdpSettings* settings)
 		xfree(settings->bitmapCacheV2CellInfo);
 		xfree(settings->glyphCache);
 		xfree(settings->fragCache);
+		key_free(settings->server_key);
+		xfree(settings->config_path);
+		xfree(settings->current_path);
+		xfree(settings->development_path);
 		xfree(settings);
 	}
 }

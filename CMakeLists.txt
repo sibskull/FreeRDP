@@ -65,6 +65,7 @@ if(CMAKE_COMPILER_IS_GNUCC)
 		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused-but-set-variable")
 	endif()
 	if(CMAKE_BUILD_TYPE STREQUAL "Release")
+		set(CMAKE_C_FLAGS_RELEASE "-DNDEBUG")
 		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O2")
 	endif()
 	if(WITH_SSE2_TARGET)
@@ -110,10 +111,12 @@ if(NOT WIN32)
 	find_optional_package(PulseAudio)
 	find_optional_package(PCSC)
 	find_suggested_package(Cups)
-	find_suggested_package(FFmpeg)
 
 	if(NOT APPLE)
+		find_suggested_package(FFmpeg)
 		find_suggested_package(ALSA)
+	else(NOT APPLE)
+		find_optional_package(FFmpeg)
 	endif()
 endif()
 
@@ -139,7 +142,7 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/freerdp.pc DESTINATION ${CMAKE_INSTALL
 
 # Build CUnit
 find_optional_package(CUnit)
-if(CUNIT_FOUND)
+if(WITH_CUNIT)
    enable_testing()
    add_subdirectory(cunit)
 endif()
@@ -163,8 +166,16 @@ if(NOT WIN32)
 	add_subdirectory(channels)
 endif()
 
-add_subdirectory(client)
-add_subdirectory(server)
+option(WITH_CLIENT "Build client binaries" ON)
+if(WITH_CLIENT)
+	add_subdirectory(client)
+endif()
+
+option(WITH_SERVER "Build server binaries" OFF)
+if(WITH_SERVER)
+	add_subdirectory(server)
+endif()
+
 add_subdirectory(keymaps)
 
 # Source package

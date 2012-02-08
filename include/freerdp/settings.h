@@ -145,6 +145,7 @@ typedef struct
 /* Certificates */
 
 typedef struct rdp_certificate rdpCertificate;
+typedef struct rdp_key rdpKey;
 
 struct rdp_CertBlob
 {
@@ -268,7 +269,8 @@ struct rdp_settings
 	boolean autologon; /* 58 */
 	boolean compression; /* 59 */
 	uint32 performance_flags; /* 60 */
-	uint32 paddingC[80 - 61]; /* 61 */
+	rdpBlob* password_cookie; /* 61 */
+	uint32 paddingC[80 - 62]; /* 62 */
 
 	/* User Interface Parameters */
 	boolean sw_gdi; /* 80 */
@@ -288,7 +290,11 @@ struct rdp_settings
 	uint32 pdu_source; /* 114 */
 	UNICONV* uniconv; /* 115 */
 	boolean server_mode; /* 116 */
-	uint32 paddingE[144 - 117]; /* 117 */
+	char* config_path; /* 117 */
+	char* current_path; /* 118 */
+	char* development_path; /* 119 */
+	boolean development_mode; /* 120 */
+	uint32 paddingE[144 - 121]; /* 121 */
 
 	/* Security */
 	boolean encryption; /* 144 */
@@ -296,7 +302,8 @@ struct rdp_settings
 	boolean nla_security; /* 146 */
 	boolean rdp_security; /* 147 */
 	uint32 ntlm_version; /* 148 */
-	uint32 paddingF[160 - 149]; /* 149 */
+	boolean secure_checksum; /* 149 */
+	uint32 paddingF[160 - 150]; /* 150 */
 
 	/* Session */
 	boolean console_audio; /* 160 */
@@ -349,7 +356,10 @@ struct rdp_settings
 	rdpBlob* server_certificate; /* 267 */
 	boolean ignore_certificate; /* 268 */
 	rdpCertificate* server_cert; /* 269 */
-	uint32 paddingL[280 - 270]; /* 270 */
+	char* rdp_key_file; /* 270 */
+	rdpKey* server_key; /* 271 */
+	char* certificate_name; /* 272 */
+	uint32 paddingL[280 - 273]; /* 273 */
 
 	/* Codecs */
 	boolean rfx_codec; /* 280 */

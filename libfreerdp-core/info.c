@@ -477,6 +477,7 @@ void rdp_write_info_packet(STREAM* s, rdpSettings* settings)
 	uint16 cbAlternateShell;
 	uint8* workingDir;
 	uint16 cbWorkingDir;
+	boolean usedPasswordCookie = false;
 
 	flags = INFO_MOUSE |
 		INFO_UNICODE |
@@ -505,8 +506,17 @@ void rdp_write_info_packet(STREAM* s, rdpSettings* settings)
 	userName = (uint8*)freerdp_uniconv_out(settings->uniconv, settings->username, &length);
 	cbUserName = length;
 
-	password = (uint8*)freerdp_uniconv_out(settings->uniconv, settings->password, &length);
-	cbPassword = length;
+	if (settings->password_cookie && settings->password_cookie->length > 0)
+	{
+		usedPasswordCookie = true;
+		password = (uint8*)settings->password_cookie->data;
+		cbPassword = settings->password_cookie->length - 2;
+	}
+	else
+	{
+		password = (uint8*)freerdp_uniconv_out(settings->uniconv, settings->password, &length);
+		cbPassword = length;
+	}
 
 	alternateShell = (uint8*)freerdp_uniconv_out(settings->uniconv, settings->shell, &length);
 	cbAlternateShell = length;
@@ -532,7 +542,7 @@ void rdp_write_info_packet(STREAM* s, rdpSettings* settings)
 	stream_write_uint16(s, 0);
 
 	if (cbPassword > 0)
-		stream_write(s, password, cbPassword);
+		stream_write(s, password, cbPassword + 2);
 	stream_write_uint16(s, 0);
 
 	if (cbAlternateShell > 0)
@@ -545,9 +555,11 @@ void rdp_write_info_packet(STREAM* s, rdpSettings* settings)
 
 	xfree(domain);
 	xfree(userName);
-	xfree(password);
 	xfree(alternateShell);
 	xfree(workingDir);
+
+	if (!usedPasswordCookie)
+		xfree(password);
 
 	if (settings->rdp_version >= 5)
 		rdp_write_extended_info_packet(s, settings); /* extraInfo */
@@ -564,14 +576,31 @@ boolean rdp_recv_client_info(rdpRdp* rdp, STREAM* s)
 {
 	uint16 length;
 	uint16 channelId;
-	uint16 sec_flags;
+	uint16 securityFlags;
 
 	if (!rdp_read_header(rdp, s, &length, &channelId))
 		return false;
 
-	rdp_read_security_header(s, &sec_flags);
-	if ((sec_flags & SEC_INFO_PKT) == 0)
+	rdp_read_security_header(s, &securityFlags);
+	if ((securityFlags & SEC_INFO_PKT) == 0)
 		return false;
+
+	if (rdp->settings->encryption)
+	{
+		if (securityFlags & SEC_REDIRECTION_PKT)
+		{
+			printf("Error: SEC_REDIRECTION_PKT unsupported\n");
+			return false;
+		}
+		if (securityFlags & SEC_ENCRYPT)
+		{
+			if (!rdp_decrypt(rdp, s, length - 4, securityFlags))
+			{
+				printf("rdp_decrypt failed\n");
+				return false;
+			}
+		}
+	}
 
 	return rdp_read_info_packet(s, rdp->settings);
 }

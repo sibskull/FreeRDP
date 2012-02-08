@@ -46,7 +46,6 @@
 #include <freerdp/freerdp.h>
 #include <freerdp/utils/blob.h>
 #include <freerdp/utils/memory.h>
-#include <freerdp/utils/certstore.h>
 
 struct crypto_sha1_struct
 {
@@ -78,11 +77,13 @@ struct crypto_cert_struct
 	X509 * px509;
 };
 
+#define	CRYPTO_SHA1_DIGEST_LENGTH	SHA_DIGEST_LENGTH
 typedef struct crypto_sha1_struct* CryptoSha1;
 CryptoSha1 crypto_sha1_init(void);
 void crypto_sha1_update(CryptoSha1 sha1, const uint8* data, uint32 length);
 void crypto_sha1_final(CryptoSha1 sha1, uint8* out_data);
 
+#define	CRYPTO_MD5_DIGEST_LENGTH	MD5_DIGEST_LENGTH
 typedef struct crypto_md5_struct* CryptoMd5;
 CryptoMd5 crypto_md5_init(void);
 void crypto_md5_update(CryptoMd5 md5, const uint8* data, uint32 length);
@@ -108,17 +109,31 @@ void crypto_hmac_final(CryptoHmac hmac, uint8 *out_data, uint32 length);
 void crypto_hmac_free(CryptoHmac hmac);
 
 typedef struct crypto_cert_struct* CryptoCert;
+
+#include "certificate.h"
+
 CryptoCert crypto_cert_read(uint8* data, uint32 length);
 char* crypto_cert_fingerprint(X509* xcert);
 char* crypto_cert_subject(X509* xcert);
+char* crypto_cert_subject_common_name(X509* xcert, int* length);
+char** crypto_cert_subject_alt_name(X509* xcert, int* count, int** lengths);
 char* crypto_cert_issuer(X509* xcert);
 void crypto_cert_print_info(X509* xcert);
 void crypto_cert_free(CryptoCert cert);
-boolean x509_verify_cert(CryptoCert cert, rdpSettings* settings);
-rdpCertData* crypto_get_cert_data(X509* xcert, char* hostname);
+
+boolean x509_verify_certificate(CryptoCert cert, char* certificate_store_path);
+rdpCertificateData* crypto_get_certificate_data(X509* xcert, char* hostname);
 boolean crypto_cert_get_public_key(CryptoCert cert, rdpBlob* public_key);
 
-void crypto_rsa_encrypt(const uint8* input, int length, uint32 key_length, const uint8* modulus, const uint8* exponent, uint8* output);
+#define	TSSK_KEY_LENGTH	64
+extern const uint8 tssk_modulus[];
+extern const uint8 tssk_privateExponent[];
+extern const uint8 tssk_exponent[];
+
+void crypto_rsa_public_encrypt(const uint8* input, int length, uint32 key_length, const uint8* modulus, const uint8* exponent, uint8* output);
+void crypto_rsa_public_decrypt(const uint8* input, int length, uint32 key_length, const uint8* modulus, const uint8* exponent, uint8* output);
+void crypto_rsa_private_encrypt(const uint8* input, int length, uint32 key_length, const uint8* modulus, const uint8* private_exponent, uint8* output);
+void crypto_rsa_private_decrypt(const uint8* input, int length, uint32 key_length, const uint8* modulus, const uint8* private_exponent, uint8* output);
 void crypto_reverse(uint8* data, int length);
 void crypto_nonce(uint8* nonce, int size);
 

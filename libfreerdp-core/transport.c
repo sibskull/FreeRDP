@@ -85,7 +85,7 @@ boolean transport_connect_rdp(rdpTransport* transport)
 boolean transport_connect_tls(rdpTransport* transport)
 {
 	if (transport->tls == NULL)
-		transport->tls = tls_new();
+		transport->tls = tls_new(transport->settings);
 
 	transport->layer = TRANSPORT_LAYER_TLS;
 	transport->tls->sockfd = transport->tcp->sockfd;
@@ -99,7 +99,7 @@ boolean transport_connect_tls(rdpTransport* transport)
 boolean transport_connect_nla(rdpTransport* transport)
 {
 	if (transport->tls == NULL)
-		transport->tls = tls_new();
+		transport->tls = tls_new(transport->settings);
 
 	transport->layer = TRANSPORT_LAYER_TLS;
 	transport->tls->sockfd = transport->tcp->sockfd;
@@ -139,7 +139,7 @@ boolean transport_accept_rdp(rdpTransport* transport)
 boolean transport_accept_tls(rdpTransport* transport)
 {
 	if (transport->tls == NULL)
-		transport->tls = tls_new();
+		transport->tls = tls_new(transport->settings);
 
 	transport->layer = TRANSPORT_LAYER_TLS;
 	transport->tls->sockfd = transport->tcp->sockfd;
@@ -153,7 +153,7 @@ boolean transport_accept_tls(rdpTransport* transport)
 boolean transport_accept_nla(rdpTransport* transport)
 {
 	if (transport->tls == NULL)
-		transport->tls = tls_new();
+		transport->tls = tls_new(transport->settings);
 
 	transport->layer = TRANSPORT_LAYER_TLS;
 	transport->tls->sockfd = transport->tcp->sockfd;
@@ -221,7 +221,6 @@ int transport_write(rdpTransport* transport, STREAM* s)
 {
 	int status = -1;
 	int length;
-	int sent = 0;
 
 	length = stream_get_length(s);
 	stream_set_pos(s, 0);
@@ -234,7 +233,7 @@ int transport_write(rdpTransport* transport, STREAM* s)
 	}
 #endif
 
-	while (sent < length)
+	while (length > 0)
 	{
 		if (transport->layer == TRANSPORT_LAYER_TLS)
 			status = tls_write(transport->tls, stream_get_tail(s), length);
@@ -258,7 +257,7 @@ int transport_write(rdpTransport* transport, STREAM* s)
 			}
 		}
 
-		sent += status;
+		length -= status;
 		stream_seek(s, status);
 	}
 
