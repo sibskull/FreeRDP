@@ -1,6 +1,6 @@
 Name: freerdp
-Version: 1.0.0
-Release: alt2
+Version: 1.0.1
+Release: alt1
 License: Apache License 2.0
 Group: Networking/Remote access
 Summary: Remote Desktop Protocol functionality
@@ -9,7 +9,7 @@ Url: http://freerdp.sourceforge.net/
 Source: http://downloads.sourceforge.net/%name/%name-%version.tar
 Patch: %name-%version-%release.patch
 
-BuildRequires: cmake ctest xmlto openssl-devel libX11-devel libXcursor-devel libXdamage-devel libXext-devel libXv-devel libXinerama-devel libxkbfile-devel cups-devel zlib-devel libalsa-devel libdirectfb-devel libICE-devel libao-devel libsamplerate-devel libpcsclite-devel libpulseaudio-devel libavcodec-devel
+BuildRequires: cmake ctest xmlto openssl-devel libX11-devel libXcursor-devel libXdamage-devel libXext-devel libXv-devel libXinerama-devel libxkbfile-devel cups-devel zlib-devel libalsa-devel libdirectfb-devel libICE-devel libao-devel libsamplerate-devel libpcsclite-devel libpulseaudio-devel libavcodec-devel CUnit-devel
 
 Requires: xfreerdp = %version-%release %name-plugins-standard = %version-%release
 
@@ -118,6 +118,9 @@ sync, disk/printer redirection, etc.
 %_libdir/pkgconfig/*
 
 %changelog
+* Tue Feb 07 2012 Slava Dubrovskiy <dubrsl@altlinux.org> 1.0.1-alt1
+- New release
+
 * Tue Jan 17 2012 Slava Dubrovskiy <dubrsl@altlinux.org> 1.0.0-alt2
 - New release
 

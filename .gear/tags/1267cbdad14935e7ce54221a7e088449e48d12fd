@@ -1,0 +1,13 @@
+object 0975c0f07e7fd6edfe9e85647db8c2f05d469c66
+type commit
+tag 1.0.1
+tagger Slava Dubrovskiy <dubrsl@altlinux.ru> 1328673540 -0500
+
+1.0.1
+-----BEGIN PGP SIGNATURE-----
+Version: GnuPG v1.4.12 (GNU/Linux)
+
+iEYEABECAAYFAk8x8wQACgkQJXEeqgdMrjWkdACfb+/RY6Xir/RtQvJEBVrcw4sP
+OfgAoJWfKpRsDtRiROaC7jjQl34nJvAt
+=bocI
+-----END PGP SIGNATURE-----
