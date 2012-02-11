@@ -73,6 +73,8 @@ sync, disk/printer redirection, etc.
 %setup -q
 %patch -p1
 
+find . -type f -name CMakeLists.txt | xargs subst 's|PULSE_LIBRARIES|PULSEAUDIO_LIBRARY|g'
+
 %build
 %cmake	-DWITH_ALSA=ON \
 	-DWITH_PULSEAUDIO=ON \
@@ -87,7 +89,10 @@ sync, disk/printer redirection, etc.
 	-DWITH_XCURSOR=ON \
 	-DWITH_XV=ON \
 	-DWITH_DIRECTFB=ON \
-	-DWITH_XDAMAGE=ON
+	-DWITH_XDAMAGE=ON \
+	-DWITH_SSE2=ON \
+	-DWITH_SSE2_TARGET=ON \
+	-DWITH_SERVER=OFF
 
 %make_build -C BUILD
 
