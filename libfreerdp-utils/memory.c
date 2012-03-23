@@ -82,12 +82,6 @@ void* xrealloc(void* ptr, size_t size)
 	if (size < 1)
 		size = 1;
 
-	if (ptr == NULL)
-	{
-		printf("xrealloc: null pointer given\n");
-		return NULL;
-	}
-
 	mem = realloc(ptr, size);
 
 	if (mem == NULL)
@@ -130,4 +124,24 @@ char* xstrdup(const char* str)
 		perror("strdup");
 
 	return mem;
+}
+
+char* xstrtoup(const char* str)
+{
+	char* out;
+	char* p;
+	int c;
+	out = xstrdup(str);
+	if(out != NULL)
+	{
+		p = out;
+		while(*p != '\0')
+		{
+			c = toupper((unsigned char)*p);
+			*p++ = (char)c;
+		}
+		return out;
+	}
+	else
+		return NULL;
 }
