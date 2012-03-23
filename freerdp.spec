@@ -1,6 +1,6 @@
 Name: freerdp
 Version: 1.0.1
-Release: alt1
+Release: alt2
 License: Apache License 2.0
 Group: Networking/Remote access
 Summary: Remote Desktop Protocol functionality
@@ -73,8 +73,6 @@ sync, disk/printer redirection, etc.
 %setup -q
 %patch -p1
 
-find . -type f -name CMakeLists.txt | xargs subst 's|PULSE_LIBRARIES|PULSEAUDIO_LIBRARY|g'
-
 %build
 %cmake	-DWITH_ALSA=ON \
 	-DWITH_PULSEAUDIO=ON \
@@ -112,7 +110,7 @@ find . -type f -name CMakeLists.txt | xargs subst 's|PULSE_LIBRARIES|PULSEAUDIO_
 %doc LICENSE README
 %_libdir/lib*.so.*
 %dir %_libdir/freerdp
-%_datadir/freerdp/
+#_datadir/freerdp/
 
 %files plugins-standard
 %_libdir/freerdp/*.so
@@ -123,6 +121,9 @@ find . -type f -name CMakeLists.txt | xargs subst 's|PULSE_LIBRARIES|PULSEAUDIO_
 %_libdir/pkgconfig/*
 
 %changelog
+* Thu Mar 22 2012 Slava Dubrovskiy <dubrsl@altlinux.org> 1.0.1-alt2
+- Build git fd465f551c34b1ae415f76be4aefeb0fef770de7
+
 * Tue Feb 07 2012 Slava Dubrovskiy <dubrsl@altlinux.org> 1.0.1-alt1
 - New release
 

@@ -1,2 +1,2 @@
-tar: @version@:.
-diff: @version@:. .
+tar: master:.
+diff: master:. .
