@@ -1,22 +1,22 @@
-/**
- * FreeRDP: A Remote Desktop Protocol client.
- * Arguments Parsing
- *
- * Copyright 2009-2011 Jay Sorg
- * Copyright 2011 Vic Lee
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
+        /**
+     * FreeRDP: A Remote Desktop Protocol client.
+     * Arguments Parsing
+     *
+     * Copyright 2009-2011 Jay Sorg
+     * Copyright 2011 Vic Lee
+     *
+     * Licensed under the Apache License, Version 2.0 (the "License");
+     * you may not use this file except in compliance with the License.
+     * You may obtain a copy of the License at
+     *
+     *     http://www.apache.org/licenses/LICENSE-2.0
+     *
+     * Unless required by applicable law or agreed to in writing, software
+     * distributed under the License is distributed on an "AS IS" BASIS,
+     * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     * See the License for the specific language governing permissions and
+     * limitations under the License.
+     */
 
 #include "config.h"
 #include <stdio.h>
@@ -30,86 +30,110 @@
 #include <freerdp/utils/passphrase.h>
 
 
-void freerdp_parse_hostname(rdpSettings* settings, char* hostname) {
-	char* p;
-	if (hostname[0] == '[' && (p = strchr(hostname, ']'))
-			&& (p[1] == 0 || (p[1] == ':' && !strchr(p + 2, ':')))) {
-			/* Either "[...]" or "[...]:..." with at most one : after the brackets */
-		settings->hostname = xstrdup(hostname + 1);
-		if ((p = strchr((char*)settings->hostname, ']'))) {
-			*p = 0;
-			if (p[1] == ':')
-				settings->port = atoi(p + 2);
-		}
-	} else {
-		/* Port number is cut off and used if exactly one : in the string */
-		settings->hostname = xstrdup(hostname);
-		if ((p = strchr((char*)settings->hostname, ':')) && !strchr(p + 1, ':')) {
-			*p = 0;
-			settings->port = atoi(p + 1);
-		}
-	}
-}
+    void freerdp_parse_hostname(rdpSettings* settings, char* hostname) {
+        char* p;
+        if (hostname[0] == '[' && (p = strchr(hostname, ']'))
+                && (p[1] == 0 || (p[1] == ':' && !strchr(p + 2, ':')))) {
+                /* Either "[...]" or "[...]:..." with at most one : after the brackets */
+            settings->hostname = xstrdup(hostname + 1);
+            if ((p = strchr((char*)settings->hostname, ']'))) {
+                *p = 0;
+                if (p[1] == ':')
+                    settings->port = atoi(p + 2);
+            }
+        } else {
+            /* Port number is cut off and used if exactly one : in the string */
+            settings->hostname = xstrdup(hostname);
+            if ((p = strchr((char*)settings->hostname, ':')) && !strchr(p + 1, ':')) {
+                *p = 0;
+                settings->port = atoi(p + 1);
+            }
+        }
+    }
 
 
 
-/**
- * Parse command-line arguments and update rdpSettings members accordingly.
- * @param settings pointer to rdpSettings struct to be updated.
- * @param argc number of arguments available.
- * @param argv string array of the arguments.
- * @param plugin_callback function to be called when a plugin needs to be loaded.
- * @param plugin_user_data pointer to be passed to the plugin_callback function.
- * @param ui_callback function to be called when a UI-specific argument is being processed.
- * @param ui_user_data pointer to be passed to the ui_callback function.
- * @return number of arguments that were parsed, or FREERDP_ARGS_PARSE_RESULT on failure or --version/--help
- */
-int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
-	ProcessPluginArgs plugin_callback, void* plugin_user_data,
-	ProcessUIArgs ui_callback, void* ui_user_data)
-{
-	int t;
-	char* p;
-	int i, j;
-	int index = 1;
-	int num_extensions = 0;
-	RDP_PLUGIN_DATA* plugin_data;
 
-	while (index < argc)
-	{
-		if ((strcmp("-h", argv[index]) == 0 ) || (strcmp("--help", argv[index]) == 0 ))
-		{
-			printf("\n"
-				"FreeRDP - A Free Remote Desktop Protocol Client\n"
-				"See http://www.freerdp.com for more information\n"
-				"\n"
-				"Usage: %s [options] server:port\n"
-				"  -0: connect to console session\n"
-				"  -a: set color depth in bits, default is 16\n"
-				"  -c: shell working directory\n"
-				"  -D: hide window decorations\n"
-				"  -T: window title\n"
-				"  -d: domain\n"
-				"  -f: fullscreen mode\n"
-				"  -g: set geometry, using format WxH or X%% or 'workarea', default is 1024x768\n"
-				"  -h: print this help\n"
-				"  -k: set keyboard layout ID\n"
-				"  -K: do not interfere with window manager bindings (don't grab keyboard)\n"
-				"  -n: hostname\n"
-				"  -o: console audio\n"
-				"  -p: password\n"
-				"  -s: set startup-shell\n"
-				"  -t: alternative port number, default is 3389\n"
-				"  -u: username\n"
-				"  -x: performance flags (m[odem], b[roadband] l[an], or a bit-mask)\n"
-				"  -X: embed into another window with a given XID.\n"
-				"  -z: enable compression\n"
-				"  --app: RemoteApp connection. This implies -g workarea\n"
-				"  --ext: load an extension\n"
-				"  --no-auth: disable authentication\n"
-				"  --authonly: authentication only, no UI\n"
-				"  --from-stdin: unspecified username, password, domain and hostname params are prompted\n"
-				"  --help: print this help\n"
+    void freerdp_parse_hostname(rdpSettings* settings, char* hostname) {
+        char* p;
+        if (hostname[0] == '[' && (p = strchr(hostname, ']'))
+                && (p[1] == 0 || (p[1] == ':' && !strchr(p + 2, ':')))) {
+                /* Either "[...]" or "[...]:..." with at most one : after the brackets */
+            settings->hostname = xstrdup(hostname + 1);
+            if ((p = strchr((char*)settings->hostname, ']'))) {
+                *p = 0;
+                if (p[1] == ':')
+                    settings->port = atoi(p + 2);
+            }
+        } else {
+            /* Port number is cut off and used if exactly one : in the string */
+            settings->hostname = xstrdup(hostname);
+            if ((p = strchr((char*)settings->hostname, ':')) && !strchr(p + 1, ':')) {
+                *p = 0;
+                settings->port = atoi(p + 1);
+            }
+        }
+    }
+
+
+
+    /**
+     * Parse command-line arguments and update rdpSettings members accordingly.
+     * @param settings pointer to rdpSettings struct to be updated.
+     * @param argc number of arguments available.
+     * @param argv string array of the arguments.
+     * @param plugin_callback function to be called when a plugin needs to be loaded.
+     * @param plugin_user_data pointer to be passed to the plugin_callback function.
+     * @param ui_callback function to be called when a UI-specific argument is being processed.
+     * @param ui_user_data pointer to be passed to the ui_callback function.
+     * @return number of arguments that were parsed, or FREERDP_ARGS_PARSE_RESULT on failure or --version/--help
+     */
+    int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
+        ProcessPluginArgs plugin_callback, void* plugin_user_data,
+        ProcessUIArgs ui_callback, void* ui_user_data)
+    {
+        int t;
+        char* p;
+        int i, j;
+        int index = 1;
+        int num_extensions = 0;
+        RDP_PLUGIN_DATA* plugin_data;
+
+        while (index < argc)
+        {
+            if ((strcmp("-h", argv[index]) == 0 ) || (strcmp("--help", argv[index]) == 0 ))
+            {
+                printf("\n"
+                    "FreeRDP - A Free Remote Desktop Protocol Client\n"
+                    "See http://www.freerdp.com for more information\n"
+                    "\n"
+                    "Usage: %s [options] server:port\n"
+                    "  -0: connect to console session\n"
+                    "  -a: set color depth in bits, default is 16\n"
+                    "  -c: shell working directory\n"
+                    "  -D: hide window decorations\n"
+                    "  -T: window title\n"
+                    "  -d: domain\n"
+                    "  -f: fullscreen mode\n"
+                    "  -g: set geometry, using format WxH or X%% or 'workarea', default is 1024x768\n"
+                    "  -h: print this help\n"
+                    "  -k: set keyboard layout ID\n"
+                    "  -K: do not interfere with window manager bindings (don't grab keyboard)\n"
+                    "  -n: hostname\n"
+                    "  -o: console audio\n"
+                    "  -p: password\n"
+                    "  -s: set startup-shell\n"
+                    "  -t: alternative port number, default is 3389\n"
+                    "  -u: username\n"
+                    "  -x: performance flags (m[odem], b[roadband] l[an], or a bit-mask)\n"
+                    "  -X: embed into another window with a given XID.\n"
+                    "  -z: enable compression\n"
+                    "  --app: RemoteApp connection. This implies -g workarea\n"
+                    "  --ext: load an extension\n"
+                    "  --no-auth: disable authentication\n"
+                    "  --authonly: authentication only, no UI\n"
+                    "  --from-stdin: unspecified username, password, domain and hostname params are prompted\n"
+                    "  --help: print this help\n"
 				"  --no-fastpath: disable fast-path\n"
 				"  --gdi: graphics rendering (hw, sw)\n"
 				"  --no-motion: don't send mouse motion events\n"
@@ -724,6 +748,7 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 		 You can prompt for username, password, domain and hostname to avoid disclosing
 		 these settings to ps. */
 
+<<<<<<< HEAD
 	if (settings->from_stdin)
 	{
 		/* username */
@@ -786,10 +811,41 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 			{
 				freerdp_parse_hostname(settings, input);
 			}
+=======
+	if (settings->from_stdin) {
+		/* username */
+		if (NULL == settings->username) {
+			char input[512];
+			printf("username: ");
+			scanf("%511s", input);
+			settings->username = xstrdup(input);
+		}
+		/* password */
+		if (NULL == settings->password) {
+			char input[512];
+			printf("password: ");
+			scanf("%511s", input);
+			settings->password = xstrdup(input);
+		}
+		/* domain */
+		if (NULL == settings->domain) {
+			char input[512];
+			printf("domain (control-D to skip): ");
+			scanf("%511s", input);
+			settings->domain = xstrdup(input);
+		}
+		/* hostname */
+		if (NULL == settings->hostname) {
+			char input[512];
+			printf("hostname: ");
+			scanf("%511s", input);
+			freerdp_parse_hostname(settings, input);
+>>>>>>> 19c6f93... xfreerdp: Adds switch --from-stdin.
 		}
 	}
 
 	/* Must have a hostname. Do you? */
+<<<<<<< HEAD
 	if (NULL == settings->hostname)
 	{
 		printf("missing server name\n");
@@ -797,6 +853,12 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 	}
 	else
 	{
+=======
+	if (NULL == settings->hostname) {
+		printf("missing server name\n");
+		return FREERDP_ARGS_PARSE_FAILURE;
+	} else {
+>>>>>>> 19c6f93... xfreerdp: Adds switch --from-stdin.
 		return index;
 	}
 
