@@ -288,8 +288,8 @@ void xf_create_window(xfInfo* xfi)
 	xfi->attribs.backing_store = xfi->primary ? NotUseful : Always;
 	xfi->attribs.override_redirect = xfi->fullscreen;
 	xfi->attribs.colormap = xfi->colormap;
-	xfi->attribs.bit_gravity = ForgetGravity;
-	xfi->attribs.win_gravity = StaticGravity;
+	xfi->attribs.bit_gravity = NorthWestGravity;
+	xfi->attribs.win_gravity = NorthWestGravity;
 
 	if (xfi->instance->settings->window_title != NULL)
 	{
@@ -309,18 +309,8 @@ void xf_create_window(xfInfo* xfi)
 	xfi->window = xf_CreateDesktopWindow(xfi, win_title, width, height, xfi->decorations);
 	xfree(win_title);
 
-	if (xfi->parent_window)
-		XReparentWindow(xfi->display, xfi->window->handle, xfi->parent_window, 0, 0);
-
 	if (xfi->fullscreen)
 		xf_SetWindowFullscreen(xfi, xfi->window, xfi->fullscreen);
-
-	/* wait for VisibilityNotify */
-	do
-	{
-		XMaskEvent(xfi->display, VisibilityChangeMask, &xevent);
-	}
-	while (xevent.type != VisibilityNotify);
 
 	xfi->unobscured = (xevent.xvisibility.state == VisibilityUnobscured);
 
@@ -531,6 +521,21 @@ boolean xf_pre_connect(freerdp* instance)
 
 	freerdp_channels_pre_connect(xfi->_context->channels, instance);
 
+  if (settings->authentication_only) {
+		/* Check --authonly has a username and password. */
+		if (settings->username == NULL ) {
+			fprintf(stderr, "--authonly, but no -u username. Please provide one.\n");
+			exit(1);
+		}
+		if (settings->password == NULL ) {
+			fprintf(stderr, "--authonly, but no -p password. Please provide one.\n");
+			exit(1);
+		}
+		fprintf(stderr, "%s:%d: Authentication only. Don't connect to X.\n", __FILE__, __LINE__);
+		// Avoid XWindows initialization and configuration below.
+		return true;
+	}
+
 	xfi->display = XOpenDisplay(NULL);
 
 	if (xfi->display == NULL)
@@ -654,6 +659,9 @@ boolean xf_post_connect(freerdp* instance)
 	xfi = ((xfContext*) instance->context)->xfi;
 	cache = instance->context->cache;
 	channels = xfi->_context->channels;
+
+	if (instance->settings->authentication_only)
+		return true;
 
 	if (xf_get_pixmap_info(xfi) != true)
 		return false;
@@ -785,7 +793,7 @@ boolean xf_authenticate(freerdp* instance, char** username, char** password, cha
 	// But it doesn't do anything to fix it...
 	*password = xmalloc(password_size * sizeof(char));
 
-	if (freerdp_passphrase_read("Password: ", *password, password_size) == NULL)
+	if (freerdp_passphrase_read("Password: ", *password, password_size, instance->settings->from_stdin) == NULL)
 		return false;
 
 	return true;
@@ -817,6 +825,14 @@ boolean xf_verify_certificate(freerdp* instance, char* subject, char* issuer, ch
 	{
 		printf("Do you trust the above certificate? (Y/N) ");
 		answer = fgetc(stdin);
+		if (feof(stdin))
+		{
+			printf("\nError: Could not read answer from stdin.");
+			if (instance->settings->from_stdin)
+				printf(" - Run without parameter \"--from-stdin\" to set trust.");
+			printf("\n");
+			return false;
+		}
 
 		if (answer == 'y' || answer == 'Y')
 		{
@@ -1081,6 +1097,13 @@ int xfreerdp_run(freerdp* instance)
 	{
 		xf_free(((xfContext*) instance->context)->xfi);
 		return XF_EXIT_CONN_FAILED;
+	}
+
+	if (instance->settings->authentication_only)
+	{
+		freerdp_disconnect(instance);
+		freerdp_free(instance);
+		return ret;
 	}
 
 	xfi = ((xfContext*) instance->context)->xfi;

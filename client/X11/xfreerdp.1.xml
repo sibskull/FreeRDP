@@ -75,10 +75,11 @@
         </listitem>
       </varlistentry>
       <varlistentry>
-        <term>-d</term>
+        <term>-d <replaceable class="parameter">domain</replaceable></term>
         <listitem>
           <para>
-            Domain used in authentication.
+            Set the domain used in authentication to
+	     <replaceable class="parameter">domain</replaceable>.
           </para>
         </listitem>
       </varlistentry>
@@ -130,10 +131,26 @@
         </listitem>
       </varlistentry>
       <varlistentry>
+        <term>-h</term>
+        <listitem>
+          <para>
+            Print help.
+          </para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
         <term>-k <replaceable class="parameter">id</replaceable></term>
         <listitem>
           <para>
             Sets the keyboard-layout-id to <replaceable class="parameter">id</replaceable>.
+          </para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term>-K</term>
+        <listitem>
+          <para>
+	    Do not interfere with window manager bindings (don't grab keyboard).
           </para>
         </listitem>
       </varlistentry>
@@ -192,7 +209,7 @@
         <term>-x <replaceable class="parameter">flag</replaceable></term>
         <listitem>
           <para>
-            Set the experiance performance flags.
+            Set the experience performance flags.
             <replaceable class="parameter">flag</replaceable> can be one of:
             <itemizedlist>
               <listitem>
@@ -249,6 +266,12 @@
         </listitem>
       </varlistentry>
       <varlistentry>
+        <term>-X <replaceable class="parameter">xid</replaceable></term>
+	<listitem>
+	  <para>embed xfreerdp into window with <replaceable class="parameter">xid</replaceable>.</para>
+	</listitem>
+      </varlistentry>
+      <varlistentry>
         <term>-z</term>
         <listitem>
           <para>
@@ -265,18 +288,52 @@
         </listitem>
       </varlistentry>
       <varlistentry>
-        <term>--ext</term>
-        <listitem>
-          <para>
-            load an extension
-          </para>
-        </listitem>
-      </varlistentry>
-      <varlistentry>
         <term>--no-auth</term>
         <listitem>
           <para>
             Skips authentication. This is useful e.g. for the current FreeRDP server that doesn't yet support server-side authentication.
+          </para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term>--authonly</term>
+        <listitem>
+          <para>
+            Only authenticates. This is useful to test your credentials (username and password).
+						Returns status code 0 if the client can connect. Requires a username,
+						password and connection host at the command line.
+          </para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term>--no-bmp-cache</term>
+        <listitem>
+          <para>
+            Disable bitmap cache.
+          </para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term>--certificate-name <replaceable class="parameter">name</replaceable></term>
+        <listitem>
+          <para>
+            use <replaceable class="parameter">name</replaceable> for the logon certificate, instead of the server name
+          </para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term>--composition</term>
+        <listitem>
+          <para>
+            Enable composition (RDVH only, not to be confused with remote composition).
+          </para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term>--ext <replaceable class="parameter">extname</replaceable></term>
+        <listitem>
+          <para>
+            load extension <replaceable class="parameter">extname</replaceable>
           </para>
         </listitem>
       </varlistentry>
@@ -291,82 +348,12 @@
         </listitem>
       </varlistentry>
       <varlistentry>
-        <term>--no-motion</term>
+        <term>--from-stdin</term>
         <listitem>
-          <para>
-            Don't send mouse motion events.
-          </para>
-        </listitem>
-      </varlistentry>
-      <varlistentry>
-        <term>--gdi</term>
-        <listitem>
-          <para>
-            GDI rendering backend. <replaceable class="parameter">backend</replaceable> can be either sw (software) or hw (hardware).
-          </para>
-        </listitem>
-      </varlistentry>
-      <varlistentry>
-        <term>--no-osb</term>
-        <listitem>
-          <para>
-            Disable off screen bitmaps.
-          </para>
-        </listitem>
-      </varlistentry>
-      <varlistentry>
-        <term>--no-bmp-cache</term>
-        <listitem>
-          <para>
-            Disable bitmap cache.
-          </para>
-        </listitem>
-      </varlistentry>
-      <varlistentry>
-        <term>--plugin</term>
-        <listitem>
-          <para>
-            load a plugin
-          </para>
-        </listitem>
-      </varlistentry>
-      <varlistentry>
-        <term>--rfx</term>
-        <listitem>
-          <para>
-            Enable RemoteFX.
-          </para>
-        </listitem>
-      </varlistentry>
-      <varlistentry>
-        <term>--rfx-mode</term>
-        <listitem>
-          <para>
-            RemoteFX operational flags. <replaceable class="parameter">flags</replaceable> can be either v[ideo], i[mage]), default is video.
-          </para>
-        </listitem>
-      </varlistentry>
-      <varlistentry>
-        <term>--nsc</term>
-        <listitem>
-          <para>
-            Enable NSCodec.
-          </para>
-        </listitem>
-      </varlistentry>
-      <varlistentry>
-        <term>--disable-wallpaper</term>
-        <listitem>
-          <para>
-            Disable wallpaper.
-          </para>
-        </listitem>
-      </varlistentry>
-      <varlistentry>
-        <term>--composition</term>
-        <listitem>
-          <para>
-            Enable composition (RDVH only, not to be confused with remote composition).
+          <para>Prompts for unspecified arguments -u username, -p
+          password, -d domain and connection host.  This is useful to
+          hide arguments from ps. Also useful for scripts that will
+          feed these arguments to the client via (what else?) stdin.
           </para>
         </listitem>
       </varlistentry>
@@ -379,58 +366,18 @@
         </listitem>
       </varlistentry>
       <varlistentry>
-        <term>--disable-menu-animations</term>
+        <term>--gdi <replaceable class="parameter">backend</replaceable></term>
         <listitem>
           <para>
-            Disable menu animations.
+            GDI (Graphics Device Interface) rendering backend. <replaceable class="parameter">backend</replaceable> can be either sw (software) or hw (hardware).
           </para>
         </listitem>
       </varlistentry>
       <varlistentry>
-        <term>--disable-theming</term>
+        <term>--help</term>
         <listitem>
           <para>
-            Disable theming.
-          </para>
-        </listitem>
-      </varlistentry>
-      <varlistentry>
-        <term>--no-rdp</term>
-        <listitem>
-          <para>
-            Disable Standard RDP encryption.
-          </para>
-        </listitem>
-      </varlistentry>
-      <varlistentry>
-        <term>--no-tls</term>
-        <listitem>
-          <para>
-            Disable TLS encryption.
-          </para>
-        </listitem>
-      </varlistentry>
-      <varlistentry>
-        <term>--no-nla</term>
-        <listitem>
-          <para>
-            Disable network level authentication.
-          </para>
-        </listitem>
-      </varlistentry>
-      <varlistentry>
-        <term>--sec <replaceable class="parameter">proto</replaceable></term>
-        <listitem>
-          <para>
-            force protocol security. <replaceable class="parameter">proto</replaceable> can be one of rdp, tls or nla.
-          </para>
-        </listitem>
-      </varlistentry>
-      <varlistentry>
-        <term>--ntlm</term>
-        <listitem>
-          <para>
-            force NTLM protocol version. <replaceable class="parameter">version</replaceable> can be one of 1 or 2.
+	    Print help.
           </para>
         </listitem>
       </varlistentry>
@@ -451,10 +398,131 @@
         </listitem>
       </varlistentry>
       <varlistentry>
-        <term>--version</term>
+        <term>--disable-menu-animations</term>
         <listitem>
           <para>
+            Disable menu animations.
+          </para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term>--no-motion</term>
+        <listitem>
+          <para>
+            Don't send mouse motion events.
+          </para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term>--no-nla</term>
+        <listitem>
+          <para>
+            Disable network level authentication.
+          </para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term>--nsc</term>
+        <listitem>
+          <para>
+            Enable NSCodec.
+          </para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term>--no-osb</term>
+        <listitem>
+          <para>
+            Disable off screen bitmaps.
+          </para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term>--plugin <replaceable class="parameter">pluginname</replaceable></term>
+        <listitem>
+          <para>
+            load <replaceable class="parameter">pluginname</replaceable>
+          </para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term>--no-rdp</term>
+        <listitem>
+          <para>
+            Disable Standard RDP encryption.
+          </para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term>--rfx</term>
+        <listitem>
+          <para>
+            Enable RemoteFX.
+          </para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term>--rfx-mode</term>
+        <listitem>
+          <para>
+            RemoteFX operational flags. <replaceable class="parameter">flags</replaceable> can be either v[ideo], i[mage]), default is video.
+          </para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term>--ntlm <replaceable class="parameter">version</replaceable></term>
+        <listitem>
+          <para>
+            force NTLM protocol version to be <replaceable
+	    class="parameter">version</replaceable>, which can be one of 1 or 2.
+          </para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term>--sec <replaceable class="parameter">proto</replaceable></term>
+        <listitem>
+          <para>
+            force protocol security. <replaceable class="parameter">proto</replaceable> can be one of rdp, tls or nla.
+          </para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term>--secure-checksum</term>
+        <listitem>
+          <para>
+	    Use salted checksums with Standard RDP encryption.
+          </para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term>--disable-theming</term>
+        <listitem>
+          <para>
+            Disable theming.
+          </para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+        <term>--no-tls</term>
+        <listitem>
+          <para>
+            Disable TLS encryption.
+          </para>
+        </listitem>
+      </varlistentry>
+      <varlistentry>
+      <term>--version</term>
+      <listitem>
+	<para>
             Print version information.
+          </para>
+      </listitem>
+    </varlistentry>
+    <varlistentry>
+        <term>--disable-wallpaper</term>
+        <listitem>
+          <para>
+            Disable wallpaper.
           </para>
         </listitem>
       </varlistentry>

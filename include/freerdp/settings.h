@@ -144,6 +144,9 @@ typedef struct
 
 /* Certificates */
 
+typedef struct rdp_certificate rdpCertificate;
+typedef struct rdp_key rdpKey;
+
 struct rdp_CertBlob
 {
 	uint32 length;
@@ -170,15 +173,6 @@ struct rdp_certificate
 	rdpCertInfo cert_info;
 	rdpX509CertChain* x509_cert_chain;
 };
-typedef struct rdp_certificate rdpCertificate;
-
-struct rdp_key
-{
-	rdpBlob modulus;
-	rdpBlob private_exponent;
-	uint8 exponent[4];
-};
-typedef struct rdp_key rdpKey;
 
 /* Channels */
 
@@ -278,7 +272,14 @@ struct rdp_settings
 	rdpBlob* password_cookie; /* 61 */
 	char* kerberos_kdc; /* 62 */
 	char* kerberos_realm; /* 63 */
-	uint32 paddingC[80 - 64]; /* 64 */
+	boolean ts_gateway; /* 64 */
+	char* tsg_hostname; /* 65 */
+	char* tsg_username; /* 66 */
+	char* tsg_password; /* 67 */
+	boolean local; /* 68 */
+	boolean authentication_only; /* 69 */
+	boolean from_stdin; /* 70 */
+	uint32 paddingC[80 - 71]; /* 71 */
 
 	/* User Interface Parameters */
 	boolean sw_gdi; /* 80 */
@@ -310,7 +311,7 @@ struct rdp_settings
 	boolean nla_security; /* 146 */
 	boolean rdp_security; /* 147 */
 	uint32 ntlm_version; /* 148 */
-	boolean salted_checksum; /* 149 */
+	boolean secure_checksum; /* 149 */
 	uint32 paddingF[160 - 150]; /* 150 */
 
 	/* Session */
