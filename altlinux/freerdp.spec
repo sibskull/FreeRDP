@@ -31,7 +31,7 @@ This is metapackage.
 %package -n xfreerdp
 Summary: Remote Desktop Protocol client
 Group: Networking/Remote access
-Requires: %name-plugins-standard
+#Requires: %name-plugins-standard
 %description -n xfreerdp
 xfreerdp is a client for Remote Desktop Protocol (RDP), used in a number of
 Microsoft products.
