@@ -1,6 +1,6 @@
 Name: freerdp
 Version: 1.0.2
-Release: alt1
+Release: alt2
 
 Group: Networking/Remote access
 Summary: Remote Desktop Protocol functionality
@@ -141,6 +141,10 @@ sync, disk/printer redirection, etc.
 %_libdir/pkgconfig/*
 
 %changelog
+* Mon Sep 30 2013 Sergey V Turchin <zerg@altlinux.org> 1.0.2-alt2
+- separate patches
+- fix compile flags
+
 * Wed Sep 18 2013 Andrey Cherepanov <cas@altlinux.org> 1.0.2-alt1
 - New verson (ALT #28716)
 - Pack freerdp keymaps
