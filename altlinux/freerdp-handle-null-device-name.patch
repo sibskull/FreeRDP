@@ -1,0 +1,25 @@
+From 473ba080e77e6715797f8497cb8f62aed3de56fe Mon Sep 17 00:00:00 2001
+From: Vic Lee <llyzs@163.com>
+Date: Wed, 9 May 2012 19:18:47 +0800
+Subject: rdpsnd/pulse: fix a segfault in case device name is not provided.
+
+---
+ channels/rdpsnd/pulse/rdpsnd_pulse.c |    2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/channels/rdpsnd/pulse/rdpsnd_pulse.c b/channels/rdpsnd/pulse/rdpsnd_pulse.c
+index 1a331f0..86e0793 100644
+--- a/channels/rdpsnd/pulse/rdpsnd_pulse.c
++++ b/channels/rdpsnd/pulse/rdpsnd_pulse.c
+@@ -474,7 +474,7 @@ int FreeRDPRdpsndDeviceEntry(PFREERDP_RDPSND_DEVICE_ENTRY_POINTS pEntryPoints)
+ 	data = pEntryPoints->plugin_data;
+ 	if (data && strcmp((char*)data->data[0], "pulse") == 0)
+ 	{
+-		if(strlen((char*)data->data[1]) > 0) 
++		if(data->data[1] && strlen((char*)data->data[1]) > 0) 
+ 			pulse->device_name = xstrdup((char*)data->data[1]);
+ 		else
+ 			pulse->device_name = NULL;
+-- 
+1.7.10.4
+
