@@ -15,6 +15,8 @@ Source: http://downloads.sourceforge.net/%name/%name-%version.tar
 Patch1: freerdp_branch-1.0.x_fix-kpdivide-issue831.patch
 Patch2: freerdp-fix-FindPCSC-macro.patch
 Patch3: freerdp-handle-null-device-name.patch
+# ALT
+Patch100: freerdp-1.0.2-alt-fix-compile.patch
 
 BuildRequires: cmake ctest xmlto openssl-devel libX11-devel libXcursor-devel libXdamage-devel libXext-devel libXv-devel libXinerama-devel libxkbfile-devel cups-devel zlib-devel libalsa-devel libdirectfb-devel libICE-devel libao-devel libsamplerate-devel libpcsclite-devel libpulseaudio-devel libavcodec-devel CUnit-devel
 
@@ -80,6 +82,7 @@ sync, disk/printer redirection, etc.
 %patch1 -p1
 %patch2 -p1
 %patch3 -p1
+%patch100 -p1
 
 %build
 %cmake	-DWITH_ALSA=ON \
