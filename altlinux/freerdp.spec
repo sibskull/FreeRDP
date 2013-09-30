@@ -102,6 +102,11 @@ sync, disk/printer redirection, etc.
 	-DWITH_SSE2=ON \
 	-DWITH_SSE2_TARGET=ON \
 	-DWITH_SERVER=OFF
+%ifarch armh
+	-DARM_FP_ABI=hard \
+	-DWITH_NEON=OFF \
+%endif
+	#
 
 %make_build -C BUILD
 
