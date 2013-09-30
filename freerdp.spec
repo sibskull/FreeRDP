@@ -1,172 +1,107 @@
-Name: freerdp
-Version: 1.0.2
-Release: alt1
-License: Apache License 2.0
-Group: Networking/Remote access
+# cmake
+# make package_source
+# rpmbuild -ta freerdp-<...>.tar.gz
+
 Summary: Remote Desktop Protocol functionality
-Packager: Slava Dubrovskiy <dubrsl@altlinux.ru>
-Url: http://freerdp.sourceforge.net/
-Source: http://downloads.sourceforge.net/%name/%name-%version.tar
-Patch: %name-%version-%release.patch
-
-BuildRequires: cmake ctest xmlto openssl-devel libX11-devel libXcursor-devel libXdamage-devel libXext-devel libXv-devel libXinerama-devel libxkbfile-devel cups-devel zlib-devel libalsa-devel libdirectfb-devel libICE-devel libao-devel libsamplerate-devel libpcsclite-devel libpulseaudio-devel libavcodec-devel CUnit-devel
-
-Requires: xfreerdp = %version-%release %name-plugins-standard = %version-%release
+Name: freerdp
+Version: 1.0.0
+Release: 1%{?dist}
+License: Apache License 2.0
+Group: Applications/Communications
+URL: http://www.freerdp.com/
+Source: http://downloads.sourceforge.net/%{name}/%{name}-%{version}.tar.gz
+BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
+BuildRequires:  openssl-devel
+BuildRequires:	libX11-devel, libXcursor-devel, libXext-devel, libXinerama-devel, libXdamage-devel, libXv-devel, libxkbfile-devel
+BuildRequires:	cups-devel
+BuildRequires:	alsa-lib-devel
+BuildRequires:	pcsc-lite-devel
 
 %description
-freerdp implements Remote Desktop Protocol (RDP), used in a number of Microsoft
-products. Rdesktop analog.
-
-This is metapackage.
-
+FreeRDP is a free implementation of the Remote Desktop Protocol (RDP)
+according to the Microsoft Open Specifications.
 
 %package -n xfreerdp
 Summary: Remote Desktop Protocol client
-Group: Networking/Remote access
-
+Group: Applications/Communications
+Requires: %{name}-libs = %{version}-%{release}, %{name}-plugins-standard = %{version}-%{release}
 %description -n xfreerdp
-xfreerdp is a client for Remote Desktop Protocol (RDP), used in a number of
-Microsoft products.
+FreeRDP is a free implementation of the Remote Desktop Protocol (RDP)
+according to the Microsoft Open Specifications.
 
-This package contains X11 UI.
-
-%package -n dfreerdp
-Summary: Remote Desktop Protocol client
-Group: Networking/Remote access
-Provides: dfbfreerdp
-
-%description -n dfreerdp
-dfbfreerdp is a client for Remote Desktop Protocol (RDP), used in a number of
-Microsoft products.
-
-This package contains  DirectFB UI.
-
-%package -n lib%name
+%package libs
 Summary: Core libraries implementing the RDP protocol
-Group: Networking/Remote access
+Group: Applications/Communications
+%description libs
+libfreerdp-core can be embedded in applications.
 
-%description -n lib%name
-libfreerdp can be embedded in applications.
+libfreerdp-channels and libfreerdp-kbd might be convenient to use in X
+applications together with libfreerdp-core.
 
-
-%package -n lib%name-devel
-Summary: Libraries and header files for embedding and extending freerdp
-Group: Development/Other
-Requires: lib%name = %version-%release pkgconfig
-Provides: freerdp-devel
-Obsoletes: freerdp-devel
-
-%description -n lib%name-devel
-Header files and unversioned libraries for libfreerdp.
+libfreerdp-core can be extended with plugins handling RDP channels.
 
 %package plugins-standard
 Summary: Plugins for handling the standard RDP channels
-Group: Networking/Remote access
-Requires: lib%name = %version-%release
-
+Group: Applications/Communications
+Requires: %{name}-libs = %{version}-%{release}
 %description plugins-standard
 A set of plugins to the channel manager implementing the standard virtual
-channels extending RDP core functionality.  For example, sounds, clipboard
+channels extending RDP core functionality. For instance, sounds, clipboard
 sync, disk/printer redirection, etc.
+
+%package devel
+Summary: Libraries and header files for embedding and extending freerdp
+Group: Applications/Communications
+Requires: %{name}-libs = %{version}-%{release}
+Requires: pkgconfig
+%description devel
+Header files and unversioned libraries for libfreerdp-core, libfreerdp-channels,
+libfreerdp-kbd, libfreerdp-cache, libfreerdp-codec, libfreerdp-rail,
+libfreerdp-gdi and libfreerdp-utils.
 
 %prep
 %setup -q
-%patch -p1
 
 %build
-%cmake	-DWITH_ALSA=ON \
-	-DWITH_PULSEAUDIO=ON \
-	-DWITH_PCSC=ON \
-	-DWITH_CUNIT=ON \
-	-DWITH_CUPS=ON \
-	-DWITH_FFMPEG=ON \
-	-DWITH_X11=ON \
-	-DWITH_XKBFILE=ON \
-	-DWITH_XINERAMA=ON \
-	-DWITH_XEXT=ON \
-	-DWITH_XCURSOR=ON \
-	-DWITH_XV=ON \
-	-DWITH_DIRECTFB=ON \
-	-DWITH_XDAMAGE=ON \
-	-DWITH_SSE2=ON \
-	-DWITH_SSE2_TARGET=ON \
-	-DWITH_SERVER=OFF
+cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr -DWITH_PCSC=ON . 
 
-%make_build -C BUILD
+make %{?_smp_mflags}
 
 %install
-%makeinstall_std -C BUILD
+rm -rf $RPM_BUILD_ROOT
+make install DESTDIR=$RPM_BUILD_ROOT
+rm -f $RPM_BUILD_ROOT%{_libdir}/{freerdp/,lib}*.{a,la} # FIXME: They shouldn't be installed in the first place
 
-%files
+%post libs -p /sbin/ldconfig
+
+%postun libs -p /sbin/ldconfig
+
+%clean
+rm -rf $RPM_BUILD_ROOT
 
 %files -n xfreerdp
-%_bindir/xfreerdp
-%_datadir/freerdp/keymaps
-%_mandir/*/*
+%defattr(-,root,root)
+%{_bindir}/xfreerdp
+%{_mandir}/*/*
 
-%files -n dfreerdp
-%_bindir/dfreerdp
-
-%files -n lib%name
+%files libs
+%defattr(-,root,root)
 %doc LICENSE README
-%_libdir/lib*.so.*
-%dir %_libdir/freerdp
-#_datadir/freerdp/
+%{_libdir}/lib*.so.*
+%dir %{_libdir}/freerdp
+%{_datadir}/freerdp/
 
 %files plugins-standard
-%_libdir/freerdp/*.so
+%defattr(-,root,root)
+%{_libdir}/freerdp/*.so
 
-%files -n lib%name-devel
-%_includedir/freerdp
-%_libdir/lib*.so
-%_libdir/pkgconfig/*
+%files devel
+%defattr(-,root,root)
+%{_includedir}/freerdp/
+%{_libdir}/lib*.so
+%{_libdir}/pkgconfig/*
 
 %changelog
-* Wed Sep 18 2013 Andrey Cherepanov <cas@altlinux.org> 1.0.2-alt1
-- New verson (ALT #28716)
-- Pack freerdp keymaps
-
-* Thu Mar 22 2012 Slava Dubrovskiy <dubrsl@altlinux.org> 1.0.1-alt2
-- Build git fd465f551c34b1ae415f76be4aefeb0fef770de7
-
-* Tue Feb 07 2012 Slava Dubrovskiy <dubrsl@altlinux.org> 1.0.1-alt1
-- New release
-
-* Tue Jan 17 2012 Slava Dubrovskiy <dubrsl@altlinux.org> 1.0.0-alt2
-- New release
-
-* Sun Jan 08 2012 Slava Dubrovskiy <dubrsl@altlinux.org> 1.0-alt1.beta5
-- New version
-
-* Sat Dec 10 2011 Slava Dubrovskiy <dubrsl@altlinux.org> 1.0-alt1.beta3
-- New version
-
-* Sat Nov 12 2011 Slava Dubrovskiy <dubrsl@altlinux.org> 1.0-alt1.beta1
-- New version (ALT #24784)
-- Update spec for use cmake
-- Change license
-- Rename subpackage dfbfreerdp -> dfreerdp
-
-* Mon Nov 15 2010 Slava Dubrovskiy <dubrsl@altlinux.org> 0.8.2-alt1
-- new version
-
-* Thu Oct 28 2010 Mykola Grechukh <gns@altlinux.ru> 0.8.1-alt2
-- added patch
-
-* Thu Oct 28 2010 Mykola Grechukh <gns@altlinux.ru> 0.8.1-alt1
-- new version
-
-* Fri Aug 06 2010 Slava Dubrovskiy <dubrsl@altlinux.org> 0.7.3-alt2
-- Rename subpackage freerdp-devel -> libfreerdp-devel
-
-* Thu Aug 05 2010 Slava Dubrovskiy <dubrsl@altlinux.org> 0.7.3-alt1
-- New version
-
-* Fri Jul 16 2010 Slava Dubrovskiy <dubrsl@altlinux.org> 0.7.2-alt2
-- Fix undefined symbols
-
-* Fri Jul 16 2010 Slava Dubrovskiy <dubrsl@altlinux.org> 0.7.2-alt1
-- Build for ALT
 
 * Tue Mar 16 2010 Mads Kiilerich <mads@kiilerich.com> - 0.0.1-1
 - Initial "upstream" freerdp spec - made and tested for Fedora 12

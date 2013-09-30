@@ -85,8 +85,8 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 				"\n"
 				"Usage: %s [options] server:port\n"
 				"  -0: connect to console session\n"
-				"  -a: set color depth in bit, default is 16\n"
-				"  -c: initial working directory\n"
+				"  -a: set color depth in bits, default is 16\n"
+				"  -c: shell working directory\n"
 				"  -D: hide window decorations\n"
 				"  -T: window title\n"
 				"  -d: domain\n"
@@ -94,15 +94,14 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 				"  -g: set geometry, using format WxH or X%% or 'workarea', default is 1024x768\n"
 				"  -h: print this help\n"
 				"  -k: set keyboard layout ID\n"
-				"  -K: do not interfere with window manager bindings\n"
-				"  -m: don't send mouse motion events\n"
+				"  -K: do not interfere with window manager bindings (don't grab keyboard)\n"
 				"  -n: hostname\n"
 				"  -o: console audio\n"
 				"  -p: password\n"
 				"  -s: set startup-shell\n"
 				"  -t: alternative port number, default is 3389\n"
 				"  -u: username\n"
-				"  -x: performance flags (m[odem], b[roadband] or l[an])\n"
+				"  -x: performance flags (m[odem], b[roadband] l[an], or a bit-mask)\n"
 				"  -X: embed into another window with a given XID.\n"
 				"  -z: enable compression\n"
 				"  --app: RemoteApp connection. This implies -g workarea\n"
@@ -110,8 +109,10 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 				"  --no-auth: disable authentication\n"
 				"  --authonly: authentication only, no UI\n"
 				"  --from-stdin: unspecified username, password, domain and hostname params are prompted\n"
+				"  --help: print this help\n"
 				"  --no-fastpath: disable fast-path\n"
 				"  --gdi: graphics rendering (hw, sw)\n"
+				"  --no-motion: don't send mouse motion events\n"
 				"  --no-osb: disable offscreen bitmaps\n"
 				"  --no-bmp-cache: disable bitmap cache\n"
 				"  --plugin: load a virtual channel plugin\n"
@@ -123,10 +124,12 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 				"  --disable-full-window-drag: disables full window drag\n"
 				"  --disable-menu-animations: disables menu animations\n"
 				"  --disable-theming: disables theming\n"
+				"  --kbd-list: list all keyboard layout ids used by -k\n"
 				"  --no-rdp: disable Standard RDP encryption\n"
 				"  --no-tls: disable TLS encryption\n"
 				"  --no-nla: disable network level authentication\n"
 				"  --ntlm: force NTLM authentication protocol version (1 or 2)\n"
+				"  --certificate-name: use the argument as the logon certificate, instead of the server name\n"
 				"  --ignore-certificate: ignore verification of logon certificate\n"
 				"  --sec: force protocol security (rdp, tls or nla)\n"
 				"  --secure-checksum: use salted checksums with Standard RDP encryption\n"
@@ -513,7 +516,7 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 				return FREERDP_ARGS_PARSE_FAILURE;
 			}
 
-			settings->parent_window_xid = strtoul(argv[index], NULL, 16);
+			settings->parent_window_xid = strtol(argv[index], NULL, 0);
 
 			if (settings->parent_window_xid == 0)
 			{
@@ -664,7 +667,10 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 		}
 		else if (strcmp("--version", argv[index]) == 0)
 		{
-			printf("This is FreeRDP version %s\n", FREERDP_VERSION_FULL);
+			if (strlen(FREERDP_VERSION_SUFFIX))
+				printf("This is FreeRDP version %s-%s\n", FREERDP_VERSION_FULL, FREERDP_VERSION_SUFFIX);
+			else
+				printf("This is FreeRDP version %s\n", FREERDP_VERSION_FULL);
 			return FREERDP_ARGS_PARSE_VERSION;
 		}
 		else if (argv[index][0] != '-')
@@ -718,58 +724,79 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 		 You can prompt for username, password, domain and hostname to avoid disclosing
 		 these settings to ps. */
 
-	if (settings->from_stdin) {
+	if (settings->from_stdin)
+	{
 		/* username */
-		if (NULL == settings->username) {
+		if (NULL == settings->username)
+		{
 			char input[512];
 			input[0] = '\0';
 			printf("username: ");
-			if (scanf("%511s", input) > 0) {
+			if (scanf("%511s%*c", input) > 0)
+			{
 				settings->username = xstrdup(input);
 			}
 		}
 		/* password */
-		if (NULL == settings->password) {
+		if (NULL == settings->password)
+		{
 			settings->password = xmalloc(512 * sizeof(char));
 			if (isatty(STDIN_FILENO))
+			{
 				freerdp_passphrase_read("password: ", settings->password, 512, settings->from_stdin);
-			else {
+			}
+			else
+			{
 				printf("password: ");
-				if (scanf("%511s", settings->password) <= 0) {
+				if (scanf("%511s%*c", settings->password) <= 0)
+				{
 					free(settings->password);
 					settings->password = NULL;
 				}
 			}
 		}
 		/* domain */
-		if (NULL == settings->domain) {
+		if (NULL == settings->domain)
+		{
 			char input[512];
 			input[0] = '\0';
 			printf("domain (control-D to skip): ");
-			if (scanf("%511s", input) > 0) {
+			if (scanf("%511s%*c", input) > 0)
+			{
 				/* Try to catch the cases where the string is NULL-ish right
 				   at the get go */
-				if (input[0] != '\0' && !(input[0] == '.' && input[1] == '\0')) {
+				if (input[0] != '\0' && !(input[0] == '.' && input[1] == '\0'))
+				{
 					settings->domain = xstrdup(input);
 				}
 			}
+			if (feof(stdin))
+			{
+				printf("\n");
+				clearerr(stdin);
+			}
 		}
 		/* hostname */
-		if (NULL == settings->hostname) {
+		if (NULL == settings->hostname)
+		{
 			char input[512];
 			input[0] = '\0';
 			printf("hostname: ");
-			if (scanf("%511s", input) > 0) {
+			if (scanf("%511s%*c", input) > 0)
+			{
 				freerdp_parse_hostname(settings, input);
 			}
 		}
 	}
 
 	/* Must have a hostname. Do you? */
-	if (NULL == settings->hostname) {
+	if (NULL == settings->hostname)
+	{
 		printf("missing server name\n");
 		return FREERDP_ARGS_PARSE_FAILURE;
-	} else {
+	}
+	else
+	{
 		return index;
 	}
 
