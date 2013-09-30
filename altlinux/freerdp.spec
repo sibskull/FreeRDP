@@ -99,8 +99,11 @@ sync, disk/printer redirection, etc.
 	-DWITH_XV=ON \
 	-DWITH_DIRECTFB=ON \
 	-DWITH_XDAMAGE=ON \
+%ifarch x86_64
 	-DWITH_SSE2=ON \
-	-DWITH_SSE2_TARGET=ON \
+%else
+	-DWITH_SSE2=OFF \
+%endif
 	-DWITH_SERVER=OFF
 %ifarch armh
 	-DARM_FP_ABI=hard \
