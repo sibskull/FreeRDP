@@ -1,3 +1,3 @@
-tar: . name=freerdp-@version@
+tar: . name=FreeRDP-stable-1.1
 copy: altlinux/*
 spec: altlinux/freerdp.spec

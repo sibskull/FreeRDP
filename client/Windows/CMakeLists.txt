@@ -1,9 +1,7 @@
-# FreeRDP: A Remote Desktop Protocol Client
+# FreeRDP: A Remote Desktop Protocol Implementation
 # FreeRDP Windows cmake build script
 #
-# Copyright 2011 O.S. Systems Software Ltda.
-# Copyright 2011 Otavio Salvador <otavio@ossystems.com.br>
-# Copyright 2011 Marc-Andre Moreau <marcandre.moreau@gmail.com>
+# Copyright 2012 Marc-Andre Moreau <marcandre.moreau@gmail.com>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,20 +15,58 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-add_executable(wfreerdp WIN32
+set(MODULE_NAME "wfreerdp-client")
+set(MODULE_PREFIX "FREERDP_CLIENT_WINDOWS_CONTROL")
+
+set(${MODULE_PREFIX}_SRCS
 	wf_gdi.c
 	wf_gdi.h
 	wf_event.c
 	wf_event.h
 	wf_graphics.c
 	wf_graphics.h
-	wfreerdp.c
-	wfreerdp.h)
+	wf_cliprdr.c
+	wf_cliprdr.h
+	wf_window.c
+	wf_window.h
+	wf_rail.c
+	wf_rail.h
+	wf_interface.c
+	wf_interface.h
+	wfreerdp.rc
+	resource.h)
 
-target_link_libraries(wfreerdp freerdp-core)
-target_link_libraries(wfreerdp freerdp-gdi)
-target_link_libraries(wfreerdp freerdp-utils)
-target_link_libraries(wfreerdp freerdp-codec)
-target_link_libraries(wfreerdp freerdp-channels)
+if(WITH_CLIENT_INTERFACE)
+	if(CLIENT_INTERFACE_SHARED)
+		add_library(${MODULE_NAME} SHARED ${${MODULE_PREFIX}_SRCS})
+	else()
+		add_library(${MODULE_NAME} ${${MODULE_PREFIX}_SRCS})
+	endif()
+	set_target_properties(${MODULE_NAME} PROPERTIES VERSION ${FREERDP_VERSION} SOVERSION ${FREERDP_API_VERSION} PREFIX "lib")
+else()
+	set(${MODULE_PREFIX}_SRCS ${${MODULE_PREFIX}_SRCS} cli/wfreerdp.c cli/wfreerdp.h)
+	add_executable(${MODULE_NAME} WIN32 ${${MODULE_PREFIX}_SRCS})
+endif()
 
-install(TARGETS wfreerdp DESTINATION ${CMAKE_INSTALL_BINDIR})
+set(${MODULE_PREFIX}_LIBS ${${MODULE_PREFIX}_LIBS} freerdp-client)
+
+set_complex_link_libraries(VARIABLE ${MODULE_PREFIX}_LIBS
+	MONOLITHIC ${MONOLITHIC_BUILD}
+	MODULE winpr
+	MODULES winpr-crt winpr-credui winpr-utils)
+
+set_complex_link_libraries(VARIABLE ${MODULE_PREFIX}_LIBS
+	MONOLITHIC ${MONOLITHIC_BUILD}
+	MODULE freerdp
+	MODULES freerdp-core freerdp-gdi freerdp-codec freerdp-primitives freerdp-utils)
+
+target_link_libraries(${MODULE_NAME} ${${MODULE_PREFIX}_LIBS})
+
+if(WITH_CLIENT_INTERFACE)
+	install(TARGETS ${MODULE_NAME} DESTINATION ${CMAKE_INSTALL_LIBDIR} COMPONENT libraries)
+	add_subdirectory(cli)
+else()
+	install(TARGETS ${MODULE_NAME} DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT client)
+endif()
+
+set_property(TARGET ${MODULE_NAME} PROPERTY FOLDER "Client/Windows")

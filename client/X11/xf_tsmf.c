@@ -1,5 +1,5 @@
 /**
- * FreeRDP: A Remote Desktop Protocol Client
+ * FreeRDP: A Remote Desktop Protocol Implementation
  * X11 Video Redirection
  *
  * Copyright 2010-2011 Vic Lee
@@ -17,18 +17,26 @@
  * limitations under the License.
  */
 
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
 #include <sys/ipc.h>
 #include <sys/shm.h>
+
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/Xatom.h>
 #include <X11/extensions/XShm.h>
-#include <freerdp/utils/memory.h>
+
+#include <winpr/crt.h>
+
 #include <freerdp/utils/event.h>
-#include <freerdp/plugins/tsmf.h>
+#include <freerdp/client/tsmf.h>
 
 #include "xf_tsmf.h"
 
@@ -46,7 +54,7 @@ struct xf_xv_context
 	int xv_image_size;
 	int xv_shmid;
 	char* xv_shmaddr;
-	uint32* xv_pixfmts;
+	UINT32* xv_pixfmts;
 };
 
 #ifdef WITH_DEBUG_XV
@@ -55,7 +63,7 @@ struct xf_xv_context
 #define DEBUG_XV(fmt, ...) DEBUG_NULL(fmt, ## __VA_ARGS__)
 #endif
 
-void xf_tsmf_init(xfInfo* xfi, long xv_port)
+void xf_tsmf_init(xfContext* xfc, long xv_port)
 {
 	int ret;
 	unsigned int i;
@@ -70,20 +78,22 @@ void xf_tsmf_init(xfInfo* xfi, long xv_port)
 	XvAttribute* attr;
 	XvImageFormatValues* fo;
 
-	xv = xnew(xfXvContext);
-	xfi->xv_context = xv;
+	xv = (xfXvContext*) malloc(sizeof(xfXvContext));
+	ZeroMemory(xv, sizeof(xfXvContext));
+
+	xfc->xv_context = xv;
 
 	xv->xv_colorkey_atom = None;
 	xv->xv_image_size = 0;
 	xv->xv_port = xv_port;
 
-	if (!XShmQueryExtension(xfi->display))
+	if (!XShmQueryExtension(xfc->display))
 	{
 		DEBUG_XV("no shmem available.");
 		return;
 	}
 
-	ret = XvQueryExtension(xfi->display, &version, &release, &request_base, &event_base, &error_base);
+	ret = XvQueryExtension(xfc->display, &version, &release, &request_base, &event_base, &error_base);
 	if (ret != Success)
 	{
 		DEBUG_XV("XvQueryExtension failed %d.", ret);
@@ -91,7 +101,7 @@ void xf_tsmf_init(xfInfo* xfi, long xv_port)
 	}
 	DEBUG_XV("version %u release %u", version, release);
 
-	ret = XvQueryAdaptors(xfi->display, DefaultRootWindow(xfi->display),
+	ret = XvQueryAdaptors(xfc->display, DefaultRootWindow(xfc->display),
 		&num_adaptors, &ai);
 	if (ret != Success)
 	{
@@ -117,30 +127,32 @@ void xf_tsmf_init(xfInfo* xfi, long xv_port)
 	}
 	DEBUG_XV("selected %ld", xv->xv_port);
 
-	attr = XvQueryPortAttributes(xfi->display, xv->xv_port, &ret);
+	attr = XvQueryPortAttributes(xfc->display, xv->xv_port, &ret);
 	for (i = 0; i < (unsigned int)ret; i++)
 	{
 		if (strcmp(attr[i].name, "XV_COLORKEY") == 0)
 		{
-			xv->xv_colorkey_atom = XInternAtom(xfi->display, "XV_COLORKEY", false);
-			XvSetPortAttribute(xfi->display, xv->xv_port, xv->xv_colorkey_atom, attr[i].min_value + 1);
+			xv->xv_colorkey_atom = XInternAtom(xfc->display, "XV_COLORKEY", FALSE);
+			XvSetPortAttribute(xfc->display, xv->xv_port, xv->xv_colorkey_atom, attr[i].min_value + 1);
 			break;
 		}
 	}
 	XFree(attr);
 
 #ifdef WITH_DEBUG_XV
-	printf("xf_tsmf_init: pixel format ");
+	fprintf(stderr, "xf_tsmf_init: pixel format ");
 #endif
-	fo = XvListImageFormats(xfi->display, xv->xv_port, &ret);
+	fo = XvListImageFormats(xfc->display, xv->xv_port, &ret);
 	if (ret > 0)
 	{
-		xv->xv_pixfmts = (uint32*) xzalloc((ret + 1) * sizeof(uint32));
+		xv->xv_pixfmts = (UINT32*) malloc((ret + 1) * sizeof(UINT32));
+		ZeroMemory(xv->xv_pixfmts, (ret + 1) * sizeof(UINT32));
+
 		for (i = 0; i < ret; i++)
 		{
 			xv->xv_pixfmts[i] = fo[i].id;
 #ifdef WITH_DEBUG_XV
-			printf("%c%c%c%c ", ((char*)(xv->xv_pixfmts + i))[0], ((char*)(xv->xv_pixfmts + i))[1],
+			fprintf(stderr, "%c%c%c%c ", ((char*)(xv->xv_pixfmts + i))[0], ((char*)(xv->xv_pixfmts + i))[1],
 				((char*)(xv->xv_pixfmts + i))[2], ((char*)(xv->xv_pixfmts + i))[3]);
 #endif
 		}
@@ -148,13 +160,13 @@ void xf_tsmf_init(xfInfo* xfi, long xv_port)
 	}
 	XFree(fo);
 #ifdef WITH_DEBUG_XV
-	printf("\n");
+	fprintf(stderr, "\n");
 #endif
 }
 
-void xf_tsmf_uninit(xfInfo* xfi)
+void xf_tsmf_uninit(xfContext* xfc)
 {
-	xfXvContext* xv = (xfXvContext*) xfi->xv_context;
+	xfXvContext* xv = (xfXvContext*) xfc->xv_context;
 
 	if (xv)
 	{
@@ -165,41 +177,43 @@ void xf_tsmf_uninit(xfInfo* xfi)
 		}
 		if (xv->xv_pixfmts)
 		{
-			xfree(xv->xv_pixfmts);
+			free(xv->xv_pixfmts);
 			xv->xv_pixfmts = NULL;
 		}
-		xfree(xv);
-		xfi->xv_context = NULL;
+		free(xv);
+		xfc->xv_context = NULL;
 	}
 }
 
-static boolean
-xf_tsmf_is_format_supported(xfXvContext* xv, uint32 pixfmt)
+static BOOL
+xf_tsmf_is_format_supported(xfXvContext* xv, UINT32 pixfmt)
 {
 	int i;
 
 	if (!xv->xv_pixfmts)
-		return false;
+		return FALSE;
 
 	for (i = 0; xv->xv_pixfmts[i]; i++)
 	{
 		if (xv->xv_pixfmts[i] == pixfmt)
-			return true;
+			return TRUE;
 	}
 
-	return false;
+	return FALSE;
 }
 
-static void xf_process_tsmf_video_frame_event(xfInfo* xfi, RDP_VIDEO_FRAME_EVENT* vevent)
+static void xf_process_tsmf_video_frame_event(xfContext* xfc, RDP_VIDEO_FRAME_EVENT* vevent)
 {
 	int i;
-	uint8* data1;
-	uint8* data2;
-	uint32 pixfmt;
+	BYTE* data1;
+	BYTE* data2;
+	UINT32 pixfmt;
+	UINT32 xvpixfmt;
+	BOOL converti420yv12 = FALSE;
 	XvImage * image;
 	int colorkey = 0;
 	XShmSegmentInfo shminfo;
-	xfXvContext* xv = (xfXvContext*) xfi->xv_context;
+	xfXvContext* xv = (xfXvContext*) xfc->xv_context;
 
 	if (xv->xv_port == 0)
 		return;
@@ -210,23 +224,50 @@ static void xf_process_tsmf_video_frame_event(xfInfo* xfi, RDP_VIDEO_FRAME_EVENT
 
 	if (xv->xv_colorkey_atom != None)
 	{
-		XvGetPortAttribute(xfi->display, xv->xv_port, xv->xv_colorkey_atom, &colorkey);
-		XSetFunction(xfi->display, xfi->gc, GXcopy);
-		XSetFillStyle(xfi->display, xfi->gc, FillSolid);
-		XSetForeground(xfi->display, xfi->gc, colorkey);
+		XvGetPortAttribute(xfc->display, xv->xv_port, xv->xv_colorkey_atom, &colorkey);
+		XSetFunction(xfc->display, xfc->gc, GXcopy);
+		XSetFillStyle(xfc->display, xfc->gc, FillSolid);
+		XSetForeground(xfc->display, xfc->gc, colorkey);
 		for (i = 0; i < vevent->num_visible_rects; i++)
 		{
-			XFillRectangle(xfi->display, xfi->window->handle, xfi->gc,
+			XFillRectangle(xfc->display, xfc->window->handle, xfc->gc,
 				vevent->x + vevent->visible_rects[i].x,
 				vevent->y + vevent->visible_rects[i].y,
 				vevent->visible_rects[i].width,
 				vevent->visible_rects[i].height);
 		}
 	}
+	else
+	{
+		XSetClipRectangles(xfc->display, xfc->gc, vevent->x, vevent->y,
+			(XRectangle*) vevent->visible_rects, vevent->num_visible_rects, YXBanded);
+	}
 
 	pixfmt = vevent->frame_pixfmt;
-	image = XvShmCreateImage(xfi->display, xv->xv_port,
-		pixfmt, 0, vevent->frame_width, vevent->frame_height, &shminfo);
+
+	if (xf_tsmf_is_format_supported(xv, pixfmt))
+	{
+		xvpixfmt = pixfmt;
+	}
+	else if (pixfmt == RDP_PIXFMT_I420 && xf_tsmf_is_format_supported(xv, RDP_PIXFMT_YV12))
+	{
+		xvpixfmt = RDP_PIXFMT_YV12;
+		converti420yv12 = TRUE;
+	}
+	else if (pixfmt == RDP_PIXFMT_YV12 && xf_tsmf_is_format_supported(xv, RDP_PIXFMT_I420))
+	{
+		xvpixfmt = RDP_PIXFMT_I420;
+		converti420yv12 = TRUE;
+	}
+	else
+	{
+		DEBUG_XV("pixel format 0x%X not supported by hardware.", pixfmt);
+		return;
+	}
+
+	image = XvShmCreateImage(xfc->display, xv->xv_port,
+		xvpixfmt, 0, vevent->frame_width, vevent->frame_height, &shminfo);
+
 	if (xv->xv_image_size != image->data_size)
 	{
 		if (xv->xv_image_size > 0)
@@ -240,9 +281,9 @@ static void xf_process_tsmf_video_frame_event(xfInfo* xfi, RDP_VIDEO_FRAME_EVENT
 	}
 	shminfo.shmid = xv->xv_shmid;
 	shminfo.shmaddr = image->data = xv->xv_shmaddr;
-	shminfo.readOnly = false;
+	shminfo.readOnly = FALSE;
 
-	if (!XShmAttach(xfi->display, &shminfo))
+	if (!XShmAttach(xfc->display, &shminfo))
 	{
 		XFree(image);
 		DEBUG_XV("XShmAttach failed.");
@@ -255,12 +296,6 @@ static void xf_process_tsmf_video_frame_event(xfInfo* xfi, RDP_VIDEO_FRAME_EVENT
 	{
 		case RDP_PIXFMT_I420:
 		case RDP_PIXFMT_YV12:
-			if (!xf_tsmf_is_format_supported(xv, RDP_PIXFMT_I420) &&
-				!xf_tsmf_is_format_supported(xv, RDP_PIXFMT_YV12))
-			{
-				DEBUG_XV("pixel format 0x%X not supported by hardware.", pixfmt);
-				break;
-			}
 			/* Y */
 			if (image->pitches[0] == vevent->frame_width)
 			{
@@ -279,7 +314,7 @@ static void xf_process_tsmf_video_frame_event(xfInfo* xfi, RDP_VIDEO_FRAME_EVENT
 			}
 			/* UV */
 			/* Conversion between I420 and YV12 is to simply swap U and V */
-			if (xf_tsmf_is_format_supported(xv, pixfmt))
+			if (converti420yv12 == FALSE)
 			{
 				data1 = vevent->frame_data + vevent->frame_width * vevent->frame_height;
 				data2 = vevent->frame_data + vevent->frame_width * vevent->frame_height +
@@ -321,33 +356,35 @@ static void xf_process_tsmf_video_frame_event(xfInfo* xfi, RDP_VIDEO_FRAME_EVENT
 			break;
 	}
 
-	XvShmPutImage(xfi->display, xv->xv_port, xfi->window->handle, xfi->gc, image,
+	XvShmPutImage(xfc->display, xv->xv_port, xfc->window->handle, xfc->gc, image,
 		0, 0, image->width, image->height,
-		vevent->x, vevent->y, vevent->width, vevent->height, false);
-	XSync(xfi->display, false);
+		vevent->x, vevent->y, vevent->width, vevent->height, FALSE);
+	if (xv->xv_colorkey_atom == None)
+		XSetClipMask(xfc->display, xfc->gc, None);
+	XSync(xfc->display, FALSE);
 
-	XShmDetach(xfi->display, &shminfo);
+	XShmDetach(xfc->display, &shminfo);
 	XFree(image);
 }
 
-static void xf_process_tsmf_redraw_event(xfInfo* xfi, RDP_REDRAW_EVENT* revent)
+static void xf_process_tsmf_redraw_event(xfContext* xfc, RDP_REDRAW_EVENT* revent)
 {
-	XSetFunction(xfi->display, xfi->gc, GXcopy);
-	XSetFillStyle(xfi->display, xfi->gc, FillSolid);
-	XCopyArea(xfi->display, xfi->primary, xfi->window->handle, xfi->gc,
+	XSetFunction(xfc->display, xfc->gc, GXcopy);
+	XSetFillStyle(xfc->display, xfc->gc, FillSolid);
+	XCopyArea(xfc->display, xfc->primary, xfc->window->handle, xfc->gc,
 		revent->x, revent->y, revent->width, revent->height, revent->x, revent->y);
 }
 
-void xf_process_tsmf_event(xfInfo* xfi, RDP_EVENT* event)
+void xf_process_tsmf_event(xfContext* xfc, wMessage* event)
 {
-	switch (event->event_type)
+	switch (GetMessageType(event->id))
 	{
-		case RDP_EVENT_TYPE_TSMF_VIDEO_FRAME:
-			xf_process_tsmf_video_frame_event(xfi, (RDP_VIDEO_FRAME_EVENT*) event);
+		case TsmfChannel_VideoFrame:
+			xf_process_tsmf_video_frame_event(xfc, (RDP_VIDEO_FRAME_EVENT*) event);
 			break;
 
-		case RDP_EVENT_TYPE_TSMF_REDRAW:
-			xf_process_tsmf_redraw_event(xfi, (RDP_REDRAW_EVENT*) event);
+		case TsmfChannel_Redraw:
+			xf_process_tsmf_redraw_event(xfc, (RDP_REDRAW_EVENT*) event);
 			break;
 
 	}
@@ -355,15 +392,15 @@ void xf_process_tsmf_event(xfInfo* xfi, RDP_EVENT* event)
 
 #else /* WITH_XV */
 
-void xf_tsmf_init(xfInfo* xfi, long xv_port)
+void xf_tsmf_init(xfContext* xfc, long xv_port)
 {
 }
 
-void xf_tsmf_uninit(xfInfo* xfi)
+void xf_tsmf_uninit(xfContext* xfc)
 {
 }
 
-void xf_process_tsmf_event(xfInfo* xfi, RDP_EVENT* event)
+void xf_process_tsmf_event(xfContext* xfc, wMessage* event)
 {
 }
 

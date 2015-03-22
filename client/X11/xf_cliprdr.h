@@ -1,5 +1,5 @@
 /**
- * FreeRDP: A Remote Desktop Protocol Client
+ * FreeRDP: A Remote Desktop Protocol Implementation
  * X11 Clipboard Redirection
  *
  * Copyright 2010-2011 Vic Lee
@@ -20,21 +20,16 @@
 #ifndef __XF_CLIPRDR_H
 #define __XF_CLIPRDR_H
 
+#include "xf_client.h"
 #include "xfreerdp.h"
 
-void xf_cliprdr_init(xfInfo* xfi, rdpChannels* chanman);
-void xf_cliprdr_uninit(xfInfo* xfi);
-void xf_process_cliprdr_event(xfInfo* xfi, RDP_EVENT* event);
-boolean xf_cliprdr_process_selection_notify(xfInfo* xfi, XEvent* xevent);
-boolean xf_cliprdr_process_selection_request(xfInfo* xfi, XEvent* xevent);
-boolean xf_cliprdr_process_selection_clear(xfInfo* xfi, XEvent* xevent);
-boolean xf_cliprdr_process_property_notify(xfInfo* xfi, XEvent* xevent);
-void xf_cliprdr_check_owner(xfInfo* xfi);
-
-#ifdef WITH_DEBUG_X11_CLIPRDR
-#define DEBUG_X11_CLIPRDR(fmt, ...) DEBUG_CLASS(X11_CLIPRDR, fmt, ## __VA_ARGS__)
-#else
-#define DEBUG_X11_CLIPRDR(fmt, ...) DEBUG_NULL(fmt, ## __VA_ARGS__)
-#endif
+void xf_cliprdr_init(xfContext* xfc, rdpChannels* channels);
+void xf_cliprdr_uninit(xfContext* xfc);
+void xf_process_cliprdr_event(xfContext* xfc, wMessage* event);
+BOOL xf_cliprdr_process_selection_notify(xfContext* xfc, XEvent* xevent);
+BOOL xf_cliprdr_process_selection_request(xfContext* xfc, XEvent* xevent);
+BOOL xf_cliprdr_process_selection_clear(xfContext* xfc, XEvent* xevent);
+BOOL xf_cliprdr_process_property_notify(xfContext* xfc, XEvent* xevent);
+void xf_cliprdr_check_owner(xfContext* xfc);
 
 #endif /* __XF_CLIPRDR_H */

@@ -1,5 +1,5 @@
 /**
- * FreeRDP: A Remote Desktop Protocol Client
+ * FreeRDP: A Remote Desktop Protocol Implementation
  * RAIL Window List
  *
  * Copyright 2011 Marc-Andre Moreau <marcandre.moreau@gmail.com>
@@ -17,13 +17,14 @@
  * limitations under the License.
  */
 
-#ifndef __RAIL_WINDOW_LIST_H
-#define __RAIL_WINDOW_LIST_H
+#ifndef FREERDP_RAIL_WINDOW_LIST_H
+#define FREERDP_RAIL_WINDOW_LIST_H
 
 #include <freerdp/api.h>
 #include <freerdp/types.h>
 #include <freerdp/update.h>
-#include <freerdp/utils/stream.h>
+
+#include <winpr/stream.h>
 
 typedef struct rdp_window_list rdpWindowList;
 
@@ -39,17 +40,18 @@ struct rdp_window_list
 };
 
 FREERDP_API void window_list_rewind(rdpWindowList* list);
-FREERDP_API boolean window_list_has_next(rdpWindowList* list);
+FREERDP_API BOOL window_list_has_next(rdpWindowList* list);
 FREERDP_API rdpWindow* window_list_get_next(rdpWindowList* list);
 
-FREERDP_API rdpWindow* window_list_get_by_id(rdpWindowList* list, uint32 windowId);
+FREERDP_API rdpWindow* window_list_get_by_id(rdpWindowList* list, UINT32 windowId);
 FREERDP_API rdpWindow* window_list_get_by_extra_id(rdpWindowList* list, void* extraId);
 
 FREERDP_API void window_list_create(rdpWindowList* list, WINDOW_ORDER_INFO* orderInfo, WINDOW_STATE_ORDER* window_state);
 FREERDP_API void window_list_update(rdpWindowList* list, WINDOW_ORDER_INFO* orderInfo, WINDOW_STATE_ORDER* window_state);
 FREERDP_API void window_list_delete(rdpWindowList* list, WINDOW_ORDER_INFO* orderInfo);
+FREERDP_API void window_list_clear(rdpWindowList* list);
 
 FREERDP_API rdpWindowList* window_list_new(rdpRail* rail);
 FREERDP_API void window_list_free(rdpWindowList* list);
 
-#endif /* __RAIL_WINDOW_LIST_H */
+#endif /* FREERDP_RAIL_WINDOW_LIST_H */

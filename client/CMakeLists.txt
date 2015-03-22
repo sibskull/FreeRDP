@@ -1,9 +1,7 @@
-# FreeRDP: A Remote Desktop Protocol Client
-# FreeRDP Client User Interfaces
+# FreeRDP: A Remote Desktop Protocol Implementation
+# FreeRDP Clients
 #
-# Copyright 2011 O.S. Systems Software Ltda.
-# Copyright 2011 Otavio Salvador <otavio@ossystems.com.br>
-# Copyright 2011 Marc-Andre Moreau <marcandre.moreau@gmail.com>
+# Copyright 2012 Marc-Andre Moreau <marcandre.moreau@gmail.com>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,24 +15,46 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# User Interfaces
+# Clients
 
-if(NOT WIN32)
-	# Build Test Client
-	add_subdirectory(test)
+add_subdirectory(common)
 
-	# Build X11 Client
-	find_suggested_package(X11)
-	if(WITH_X11)
-		add_subdirectory(X11)
+if(WIN32)
+	add_subdirectory(Windows)	
+else()
+	if(WITH_SAMPLE)
+		add_subdirectory(Sample)
 	endif()
 
-	# Build DirectFB Client
-	find_optional_package(DirectFB)
 	if(WITH_DIRECTFB)
 		add_subdirectory(DirectFB)
 	endif()
-else()
-	# Build Windows Client
-	add_subdirectory(Windows)
+endif()
+
+if(WITH_X11)
+	add_subdirectory(X11)
+endif()
+
+if(APPLE)
+	if(IOS)
+		if(IS_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/iOS")
+			message(STATUS "Adding iOS client")
+			add_subdirectory(iOS)
+		endif()
+	else()
+		add_subdirectory(Mac)
+	endif()
+endif()
+
+if(ANDROID)
+	message(STATUS "Adding Android client")
+	add_subdirectory(Android)
+endif()
+
+if(WITH_WAYK)
+	add_subdirectory(WaykClient)
+endif()
+
+if (WITH_DOTNET)
+	add_subdirectory(DotNetClient)
 endif()

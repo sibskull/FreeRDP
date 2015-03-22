@@ -1,5 +1,5 @@
 /**
- * FreeRDP: A Remote Desktop Protocol Client
+ * FreeRDP: A Remote Desktop Protocol Implementation
  * X11 Server Input
  *
  * Copyright 2011 Marc-Andre Moreau <marcandre.moreau@gmail.com>
@@ -17,64 +17,79 @@
  * limitations under the License.
  */
 
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #include <X11/Xlib.h>
-#include <freerdp/kbd/kbd.h>
+
+#include <freerdp/locale/keyboard.h>
+
+#include <winpr/crt.h>
+#include <winpr/input.h>
+
+#include "xf_peer.h"
 
 #include "xf_input.h"
 
-void xf_input_synchronize_event(rdpInput* input, uint32 flags)
+void xf_input_synchronize_event(rdpInput* input, UINT32 flags)
 {
-	printf("Client sent a synchronize event (flags:0x%X)\n", flags);
+	fprintf(stderr, "Client sent a synchronize event (flags:0x%X)\n", flags);
 }
 
-void xf_input_keyboard_event(rdpInput* input, uint16 flags, uint16 code)
+void xf_input_keyboard_event(rdpInput* input, UINT16 flags, UINT16 code)
 {
-	unsigned int keycode;
-	boolean extended = false;
+#ifdef WITH_XTEST
+	DWORD vkcode;
+	DWORD keycode;
+	BOOL extended = FALSE;
 	xfPeerContext* xfp = (xfPeerContext*) input->context;
 	xfInfo* xfi = xfp->info;
 
 	if (flags & KBD_FLAGS_EXTENDED)
-		extended = true;
+		extended = TRUE;
 
-	keycode = freerdp_kbd_get_keycode_by_scancode(code, extended);
+	if (extended)
+		code |= KBDEXT;
+
+	vkcode = GetVirtualKeyCodeFromVirtualScanCode(code, 4);
+	keycode = GetKeycodeFromVirtualKeyCode(vkcode, KEYCODE_TYPE_EVDEV);
 
 	if (keycode != 0)
 	{
-#ifdef WITH_XTEST
-		pthread_mutex_lock(&(xfp->mutex));
+		XTestGrabControl(xfi->display, True);
 
 		if (flags & KBD_FLAGS_DOWN)
 			XTestFakeKeyEvent(xfi->display, keycode, True, 0);
 		else if (flags & KBD_FLAGS_RELEASE)
 			XTestFakeKeyEvent(xfi->display, keycode, False, 0);
 
-		pthread_mutex_unlock(&(xfp->mutex));
-#endif
+		XTestGrabControl(xfi->display, False);
 	}
+#endif
 }
 
-void xf_input_unicode_keyboard_event(rdpInput* input, uint16 flags, uint16 code)
+void xf_input_unicode_keyboard_event(rdpInput* input, UINT16 flags, UINT16 code)
 {
-	printf("Client sent a unicode keyboard event (flags:0x%X code:0x%X)\n", flags, code);
+	fprintf(stderr, "Client sent a unicode keyboard event (flags:0x%X code:0x%X)\n", flags, code);
 }
 
-void xf_input_mouse_event(rdpInput* input, uint16 flags, uint16 x, uint16 y)
+void xf_input_mouse_event(rdpInput* input, UINT16 flags, UINT16 x, UINT16 y)
 {
-	int button = 0;
-	boolean down = false;
+#ifdef WITH_XTEST
 	xfPeerContext* xfp = (xfPeerContext*) input->context;
+	int button = 0;
+	BOOL down = FALSE;
 	xfInfo* xfi = xfp->info;
 
-	pthread_mutex_lock(&(xfp->mutex));
-#ifdef WITH_XTEST
+	XTestGrabControl(xfi->display, True);
 
 	if (flags & PTR_FLAGS_WHEEL)
 	{
-		boolean negative = false;
+		BOOL negative = FALSE;
 
 		if (flags & PTR_FLAGS_WHEEL_NEGATIVE)
-			negative = true;
+			negative = TRUE;
 
 		button = (negative) ? 5 : 4;
 
@@ -94,25 +109,26 @@ void xf_input_mouse_event(rdpInput* input, uint16 flags, uint16 x, uint16 y)
 			button = 2;
 
 		if (flags & PTR_FLAGS_DOWN)
-			down = true;
+			down = TRUE;
 
 		if (button != 0)
 			XTestFakeButtonEvent(xfi->display, button, down, 0);
 	}
+
+	XTestGrabControl(xfi->display, False);
 #endif
-	pthread_mutex_unlock(&(xfp->mutex));
 }
 
-void xf_input_extended_mouse_event(rdpInput* input, uint16 flags, uint16 x, uint16 y)
+void xf_input_extended_mouse_event(rdpInput* input, UINT16 flags, UINT16 x, UINT16 y)
 {
+#ifdef WITH_XTEST
 	xfPeerContext* xfp = (xfPeerContext*) input->context;
 	xfInfo* xfi = xfp->info;
 
-	pthread_mutex_lock(&(xfp->mutex));
-#ifdef WITH_XTEST
+	XTestGrabControl(xfi->display, True);
 	XTestFakeMotionEvent(xfi->display, 0, x, y, CurrentTime);
+	XTestGrabControl(xfi->display, False);
 #endif
-	pthread_mutex_unlock(&(xfp->mutex));
 }
 
 void xf_input_register_callbacks(rdpInput* input)

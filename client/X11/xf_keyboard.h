@@ -1,5 +1,5 @@
 /**
- * FreeRDP: A Remote Desktop Protocol Client
+ * FreeRDP: A Remote Desktop Protocol Implementation
  * X11 Keyboard Handling
  *
  * Copyright 2011 Marc-Andre Moreau <marcandre.moreau@gmail.com>
@@ -20,20 +20,22 @@
 #ifndef __XF_KEYBOARD_H
 #define __XF_KEYBOARD_H
 
-#include <freerdp/kbd/kbd.h>
-#include <freerdp/kbd/vkcodes.h>
+#include <freerdp/locale/keyboard.h>
 
+#include "xf_client.h"
 #include "xfreerdp.h"
 
-void xf_kbd_init(xfInfo* xfi);
-void xf_kbd_set_keypress(xfInfo* xfi, uint8 keycode, KeySym keysym);
-void xf_kbd_unset_keypress(xfInfo* xfi, uint8 keycode);
-boolean xf_kbd_key_pressed(xfInfo* xfi, KeySym keysym);
-void xf_kbd_send_key(xfInfo* xfi, boolean down, uint8 keycode);
-int xf_kbd_read_keyboard_state(xfInfo* xfi);
-boolean xf_kbd_get_key_state(xfInfo* xfi, int state, int keysym);
-int xf_kbd_get_toggle_keys_state(xfInfo* xfi);
-void xf_kbd_focus_in(xfInfo* xfi);
-boolean xf_kbd_handle_special_keys(xfInfo* xfi, KeySym keysym);
+void xf_kbd_init(xfContext* xfc);
+void xf_kbd_clear(xfContext* xfc);
+void xf_kbd_set_keypress(xfContext* xfc, BYTE keycode, KeySym keysym);
+void xf_kbd_unset_keypress(xfContext* xfc, BYTE keycode);
+void xf_kbd_release_all_keypress(xfContext* xfc);
+BOOL xf_kbd_key_pressed(xfContext* xfc, KeySym keysym);
+void xf_kbd_send_key(xfContext* xfc, BOOL down, BYTE keycode);
+int xf_kbd_read_keyboard_state(xfContext* xfc);
+BOOL xf_kbd_get_key_state(xfContext* xfc, int state, int keysym);
+int xf_kbd_get_toggle_keys_state(xfContext* xfc);
+void xf_kbd_focus_in(xfContext* xfc);
+BOOL xf_kbd_handle_special_keys(xfContext* xfc, KeySym keysym);
 
 #endif /* __XF_KEYBOARD_H */

@@ -1,5 +1,5 @@
 /**
- * FreeRDP: A Remote Desktop Protocol Client
+ * FreeRDP: A Remote Desktop Protocol Implementation
  * Remote Applications Integrated Locally (RAIL)
  *
  * Copyright 2011 Marc-Andre Moreau <marcandre.moreau@gmail.com>
@@ -17,16 +17,17 @@
  * limitations under the License.
  */
 
-#ifndef __RAIL_H
-#define __RAIL_H
+#ifndef FREERDP_RAIL_H
+#define FREERDP_RAIL_H
 
 #include <freerdp/api.h>
 #include <freerdp/rail.h>
 #include <freerdp/types.h>
 #include <freerdp/update.h>
 #include <freerdp/freerdp.h>
-#include <freerdp/utils/stream.h>
 #include <freerdp/codec/color.h>
+
+#include <winpr/stream.h>
 
 #include <freerdp/rail/icon.h>
 #include <freerdp/rail/window.h>
@@ -35,16 +36,16 @@
 typedef void (*railCreateWindow)(rdpRail* rail, rdpWindow* window);
 typedef void (*railDestroyWindow)(rdpRail* rail, rdpWindow* window);
 typedef void (*railMoveWindow)(rdpRail* rail, rdpWindow* window);
-typedef void (*railShowWindow)(rdpRail* rail, rdpWindow* window, uint8 state);
+typedef void (*railShowWindow)(rdpRail* rail, rdpWindow* window, BYTE state);
 typedef void (*railSetWindowText)(rdpRail* rail, rdpWindow* window);
 typedef void (*railSetWindowIcon)(rdpRail* rail, rdpWindow* window, rdpIcon* icon);
 typedef void (*railSetWindowRects)(rdpRail* rail, rdpWindow* window);
 typedef void (*railSetWindowVisibilityRects)(rdpRail* rail, rdpWindow* window);
+typedef void (*railDesktopNonMonitored) (rdpRail* rail, rdpWindow* window);
 
 struct rdp_rail
 {
 	void* extra;
-	UNICONV* uniconv;
 	CLRCONV* clrconv;
 	rdpIconCache* cache;
 	rdpWindowList* list;
@@ -57,6 +58,7 @@ struct rdp_rail
 	railSetWindowIcon rail_SetWindowIcon;
 	railSetWindowRects rail_SetWindowRects;
 	railSetWindowVisibilityRects rail_SetWindowVisibilityRects;
+	railDesktopNonMonitored rail_DesktopNonMonitored;
 };
 
 FREERDP_API void rail_register_update_callbacks(rdpRail* rail, rdpUpdate* update);
@@ -64,4 +66,4 @@ FREERDP_API void rail_register_update_callbacks(rdpRail* rail, rdpUpdate* update
 FREERDP_API rdpRail* rail_new(rdpSettings* settings);
 FREERDP_API void rail_free(rdpRail* rail);
 
-#endif /* __RAIL_H */
+#endif /* FREERDP_RAIL_H */

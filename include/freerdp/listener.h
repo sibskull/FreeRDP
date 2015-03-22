@@ -1,5 +1,5 @@
 /**
- * FreeRDP: A Remote Desktop Protocol client.
+ * FreeRDP: A Remote Desktop Protocol Implementation
  * RDP Server Listener
  *
  * Copyright 2011 Vic Lee
@@ -17,8 +17,8 @@
  * limitations under the License.
  */
 
-#ifndef __FREERDP_LISTENER_H
-#define __FREERDP_LISTENER_H
+#ifndef FREERDP_LISTENER_H
+#define FREERDP_LISTENER_H
 
 typedef struct rdp_freerdp_listener freerdp_listener;
 
@@ -31,9 +31,10 @@ typedef struct rdp_freerdp_listener freerdp_listener;
 extern "C" {
 #endif
 
-typedef boolean (*psListenerOpen)(freerdp_listener* instance, const char* bind_address, uint16 port);
-typedef boolean (*psListenerGetFileDescriptor)(freerdp_listener* instance, void** rfds, int* rcount);
-typedef boolean (*psListenerCheckFileDescriptor)(freerdp_listener* instance);
+typedef BOOL (*psListenerOpen)(freerdp_listener* instance, const char* bind_address, UINT16 port);
+typedef BOOL (*psListenerOpenLocal)(freerdp_listener* instance, const char* path);
+typedef BOOL (*psListenerGetFileDescriptor)(freerdp_listener* instance, void** rfds, int* rcount);
+typedef BOOL (*psListenerCheckFileDescriptor)(freerdp_listener* instance);
 typedef void (*psListenerClose)(freerdp_listener* instance);
 typedef void (*psPeerAccepted)(freerdp_listener* instance, freerdp_peer* client);
 
@@ -47,6 +48,7 @@ struct rdp_freerdp_listener
 	void* param4;
 
 	psListenerOpen Open;
+	psListenerOpenLocal OpenLocal;
 	psListenerGetFileDescriptor GetFileDescriptor;
 	psListenerCheckFileDescriptor CheckFileDescriptor;
 	psListenerClose Close;
@@ -61,5 +63,4 @@ FREERDP_API void freerdp_listener_free(freerdp_listener* instance);
 }
 #endif
 
-#endif
-
+#endif /* FREERDP_LISTENER_H */

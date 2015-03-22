@@ -1,5 +1,5 @@
 /**
- * FreeRDP: A Remote Desktop Protocol Client
+ * FreeRDP: A Remote Desktop Protocol Implementation
  * Microsoft Point to Point Compression (MPPC)  Unit Tests
  *
  * Copyright 2011 Laxmikant Rashinkar <LK.Rashinkar@gmail.com>
@@ -24,7 +24,7 @@
 #include "rdp.h"
 #include "test_mppc.h"
 
-uint8_t compressed_rd5[] =
+BYTE_t compressed_rd5[] =
 {
     0x24, 0x02, 0x03, 0x09, 0x00, 0x20, 0x0c, 0x05, 0x10, 0x01, 0x40, 0x0a, 0xbf, 0xdf, 0xc3, 0x20,
     0x80, 0x00, 0x1f, 0x0a, 0x00, 0x00, 0x07, 0x43, 0x4e, 0x00, 0x68, 0x02, 0x00, 0x22, 0x00, 0x34,
@@ -206,7 +206,7 @@ uint8_t compressed_rd5[] =
     0x7f, 0x52, 0x00                                         
 };
 
-uint8_t decompressed_rd5[] = 
+BYTE_t decompressed_rd5[] = 
 {
     0x24, 0x02, 0x03, 0x09, 0x00, 0x20, 0x0c, 0x05, 0x10, 0x01, 0x40, 0x0a, 0xff, 0xff, 0x0c, 0x84, 
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x1d, 0x0d, 0x38, 0x01, 0xc0, 0x10, 0x01, 0x10, 
@@ -635,33 +635,28 @@ int add_mppc_suite(void)
 
 void test_mppc(void)
 {
-    rdpRdp rdp;
-    struct rdp_mppc rmppc;
-    uint32_t roff;
-    uint32_t rlen;
+    struct rdp_mppc_dec* rmppc;
+    UINT32 roff;
+    UINT32 rlen;
     long int dur;
 
     struct timeval start_time;
     struct timeval end_time;
 
-    rdp.mppc = &rmppc;
-    rdp.mppc->history_buf = calloc(1, RDP6_HISTORY_BUF_SIZE);
-    CU_ASSERT(rdp.mppc->history_buf != NULL)
-    rdp.mppc->history_ptr = rdp.mppc->history_buf;
-
+    rmppc = mppc_dec_new();
 
     /* save starting time */
     gettimeofday(&start_time, NULL);
 
     /* uncompress data */
-    CU_ASSERT(decompress_rdp_5(&rdp, compressed_rd5, sizeof(compressed_rd5), 
-        PACKET_COMPRESSED, &roff, &rlen) == true);
+    CU_ASSERT(decompress_rdp_5(rmppc, compressed_rd5, sizeof(compressed_rd5),
+        PACKET_COMPRESSED, &roff, &rlen) == TRUE);
 
     /* get end time */
     gettimeofday(&end_time, NULL);
 
-    CU_ASSERT(memcmp(decompressed_rd5, rdp.mppc->history_buf, sizeof(decompressed_rd5)) == 0);
-    free(rdp.mppc->history_buf);
+    CU_ASSERT(memcmp(decompressed_rd5, rmppc->history_buf, sizeof(decompressed_rd5)) == 0);
+    mppc_dec_free(rmppc);
 
     /* print time taken */
     dur = ((end_time.tv_sec - start_time.tv_sec) * 1000000) + (end_time.tv_usec - start_time.tv_usec);

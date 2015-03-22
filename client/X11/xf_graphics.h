@@ -1,5 +1,5 @@
 /**
- * FreeRDP: A Remote Desktop Protocol Client
+ * FreeRDP: A Remote Desktop Protocol Implementation
  * X11 Graphical Objects
  *
  * Copyright 2011 Marc-Andre Moreau <marcandre.moreau@gmail.com>
@@ -20,6 +20,7 @@
 #ifndef __XF_GRAPHICS_H
 #define __XF_GRAPHICS_H
 
+#include "xf_client.h"
 #include "xfreerdp.h"
 
 void xf_register_graphics(rdpGraphics* graphics);
