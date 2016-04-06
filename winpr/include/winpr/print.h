@@ -20,6 +20,10 @@
 #ifndef WINPR_UTILS_PRINT_H
 #define WINPR_UTILS_PRINT_H
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdarg.h>
+
 #include <winpr/winpr.h>
 #include <winpr/wtypes.h>
 
@@ -29,9 +33,14 @@
 extern "C" {
 #endif
 
-WINPR_API void winpr_HexDump(BYTE* data, int length);
+WINPR_API void winpr_HexDump(const char* tag, int lvl, const BYTE* data, int length);
+WINPR_API void winpr_CArrayDump(const char* tag, int lvl, const BYTE* data, int length, int width);
 
-WINPR_API int wprintfx(const char *fmt, ...);
+WINPR_API char* winpr_BinToHexString(const BYTE* data, int length, BOOL space);
+
+WINPR_API int wprintfx(const char* fmt, ...);
+WINPR_API int wvprintfx(const char* fmt, va_list args);
+WINPR_API int wvsnprintfx(char* buffer, size_t bufferSize, const char* fmt, va_list args);
 
 #ifdef __cplusplus
 }

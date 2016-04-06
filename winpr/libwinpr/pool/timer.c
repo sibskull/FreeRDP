@@ -25,6 +25,7 @@
 #include <winpr/pool.h>
 
 #ifdef WINPR_THREAD_POOL
+
 PTP_TIMER CreateThreadpoolTimer(PTP_TIMER_CALLBACK pfnti, PVOID pv, PTP_CALLBACK_ENVIRON pcbe)
 {
 	return NULL;

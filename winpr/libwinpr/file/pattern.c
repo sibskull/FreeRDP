@@ -34,6 +34,9 @@
 #include <fcntl.h>
 #endif
 
+#include "../log.h"
+#define TAG WINPR_TAG("file")
+
 /**
  * File System Behavior in the Microsoft Windows Environment:
  * http://download.microsoft.com/download/4/3/8/43889780-8d45-4b2e-9d3a-c696a890309f/File%20System%20Behavior%20Overview.pdf
@@ -42,7 +45,6 @@
 LPSTR FilePatternFindNextWildcardA(LPCSTR lpPattern, DWORD* pFlags)
 {
 	LPSTR lpWildcard;
-
 	*pFlags = 0;
 	lpWildcard = strpbrk(lpPattern, "*?~");
 
@@ -82,9 +84,12 @@ LPSTR FilePatternFindNextWildcardA(LPCSTR lpPattern, DWORD* pFlags)
 }
 
 BOOL FilePatternMatchSubExpressionA(LPCSTR lpFileName, size_t cchFileName,
-		LPCSTR lpX, size_t cchX, LPCSTR lpY, size_t cchY, LPCSTR lpWildcard, LPSTR* ppMatchEnd)
+									LPCSTR lpX, size_t cchX, LPCSTR lpY, size_t cchY, LPCSTR lpWildcard, LPSTR* ppMatchEnd)
 {
 	LPSTR lpMatch;
+
+	if (!lpFileName)
+		return FALSE;
 
 	if (*lpWildcard == '*')
 	{
@@ -98,7 +103,6 @@ BOOL FilePatternMatchSubExpressionA(LPCSTR lpFileName, size_t cchFileName,
 		/*
 		 * State 0: match 'X'
 		 */
-
 		if (_strnicmp(lpFileName, lpX, cchX) != 0)
 			return FALSE;
 
@@ -131,9 +135,7 @@ BOOL FilePatternMatchSubExpressionA(LPCSTR lpFileName, size_t cchFileName,
 		/**
 		 * State 3: final state
 		 */
-
 		*ppMatchEnd = (LPSTR) &lpMatch[cchY];
-
 		return TRUE;
 	}
 	else if (*lpWildcard == '?')
@@ -146,7 +148,6 @@ BOOL FilePatternMatchSubExpressionA(LPCSTR lpFileName, size_t cchFileName,
 		/*
 		 * State 0: match 'X'
 		 */
-
 		if (cchFileName < cchX)
 			return FALSE;
 
@@ -171,7 +172,7 @@ BOOL FilePatternMatchSubExpressionA(LPCSTR lpFileName, size_t cchFileName,
 
 			if (_strnicmp(lpMatch, lpY, cchY) != 0)
 				return FALSE;
-			}
+		}
 		else
 		{
 			if ((cchX + 1) > cchFileName)
@@ -183,15 +184,12 @@ BOOL FilePatternMatchSubExpressionA(LPCSTR lpFileName, size_t cchFileName,
 		/**
 		 * State 3: final state
 		 */
-
 		*ppMatchEnd = (LPSTR) &lpMatch[cchY];
-
 		return TRUE;
 	}
 	else if (*lpWildcard == '~')
 	{
-		fprintf(stderr, "warning: unimplemented '~' pattern match\n");
-
+		WLog_ERR(TAG, "warning: unimplemented '~' pattern match");
 		return TRUE;
 	}
 
@@ -261,7 +259,6 @@ BOOL FilePatternMatchA(LPCSTR lpFileName, LPCSTR lpPattern)
 		if (!FilePatternFindNextWildcardA(lpTail, &dwFlags))
 		{
 			/* tail contains no wildcards */
-
 			if (cchFileName < cchTail)
 				return FALSE;
 
@@ -305,7 +302,6 @@ BOOL FilePatternMatchA(LPCSTR lpFileName, LPCSTR lpPattern)
 	 *                            ^EOF of .^
 	 *
 	 */
-
 	lpWildcard = FilePatternFindNextWildcardA(lpPattern, &dwFlags);
 
 	if (lpWildcard)
@@ -314,20 +310,17 @@ BOOL FilePatternMatchA(LPCSTR lpFileName, LPCSTR lpPattern)
 		LPSTR lpY;
 		size_t cchX;
 		size_t cchY;
-		LPSTR lpMatchEnd;
+		LPSTR lpMatchEnd = NULL;
 		LPSTR lpSubPattern;
 		size_t cchSubPattern;
 		LPSTR lpSubFileName;
 		size_t cchSubFileName;
 		size_t cchWildcard;
 		size_t cchNextWildcard;
-
 		cchSubPattern = cchPattern;
 		lpSubPattern = (LPSTR) lpPattern;
-
 		cchSubFileName = cchFileName;
 		lpSubFileName = (LPSTR) lpFileName;
-
 		cchWildcard = ((dwFlags & WILDCARD_DOS) ? 2 : 1);
 		lpNextWildcard = FilePatternFindNextWildcardA(&lpWildcard[cchWildcard], &dwNextFlags);
 
@@ -335,13 +328,10 @@ BOOL FilePatternMatchA(LPCSTR lpFileName, LPCSTR lpPattern)
 		{
 			lpX = (LPSTR) lpSubPattern;
 			cchX = (lpWildcard - lpSubPattern);
-
 			lpY = (LPSTR) &lpSubPattern[cchX + cchWildcard];
 			cchY = (cchSubPattern - (lpY - lpSubPattern));
-
 			match = FilePatternMatchSubExpressionA(lpSubFileName, cchSubFileName,
-					lpX, cchX, lpY, cchY, lpWildcard, &lpMatchEnd);
-
+												   lpX, cchX, lpY, cchY, lpWildcard, &lpMatchEnd);
 			return match;
 		}
 		else
@@ -350,25 +340,20 @@ BOOL FilePatternMatchA(LPCSTR lpFileName, LPCSTR lpPattern)
 			{
 				cchSubFileName = cchFileName - (lpSubFileName - lpFileName);
 				cchNextWildcard = ((dwNextFlags & WILDCARD_DOS) ? 2 : 1);
-
 				lpX = (LPSTR) lpSubPattern;
 				cchX = (lpWildcard - lpSubPattern);
-
 				lpY = (LPSTR) &lpSubPattern[cchX + cchWildcard];
 				cchY = (lpNextWildcard - lpWildcard) - cchWildcard;
-
 				match = FilePatternMatchSubExpressionA(lpSubFileName, cchSubFileName,
-						lpX, cchX, lpY, cchY, lpWildcard, &lpMatchEnd);
+													   lpX, cchX, lpY, cchY, lpWildcard, &lpMatchEnd);
 
 				if (!match)
 					return FALSE;
 
 				lpSubFileName = lpMatchEnd;
-
 				cchWildcard = cchNextWildcard;
 				lpWildcard = lpNextWildcard;
 				dwFlags = dwNextFlags;
-
 				lpNextWildcard = FilePatternFindNextWildcardA(&lpWildcard[cchWildcard], &dwNextFlags);
 			}
 
@@ -378,7 +363,6 @@ BOOL FilePatternMatchA(LPCSTR lpFileName, LPCSTR lpPattern)
 	else
 	{
 		/* no wildcard characters */
-
 		if (_stricmp(lpFileName, lpPattern) == 0)
 			return TRUE;
 	}

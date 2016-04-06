@@ -54,6 +54,8 @@ BOOL wf_mirror_driver_find_display_device(wfInfo* wfi)
 			{
 				deviceKeyLength = _tcslen(deviceInfo.DeviceKey) - deviceKeyPrefixLength;
 				wfi->deviceKey = (LPTSTR) malloc((deviceKeyLength + 1) * sizeof(TCHAR));
+				if (!wfi->deviceKey)
+					return FALSE;
 
 				_tcsncpy_s(wfi->deviceKey, deviceKeyLength + 1,
 					&deviceInfo.DeviceKey[deviceKeyPrefixLength], deviceKeyLength);
@@ -91,14 +93,28 @@ BOOL wf_mirror_driver_display_device_attach(wfInfo* wfi, DWORD mode)
 		0, KEY_ALL_ACCESS | KEY_WOW64_64KEY, &hKey);
 
 	if (status != ERROR_SUCCESS)
+	{
+		WLog_DBG(TAG, "Error opening RegKey: status=%0X", status);
+
+		if (status == ERROR_ACCESS_DENIED)
+			WLog_DBG(TAG, "access denied. Do you have admin privleges?");
+
 		return FALSE;
+	}
 
 	dwSize = sizeof(DWORD);
 	status = RegQueryValueEx(hKey, _T("Attach.ToDesktop"),
 		NULL, &dwType, (BYTE*) &dwValue, &dwSize);
 
 	if (status != ERROR_SUCCESS)
+	{
+		WLog_DBG(TAG, "Error querying RegKey: status=%0X", status);
+
+		if (status == ERROR_ACCESS_DENIED)
+			WLog_DBG(TAG, "access denied. Do you have admin privleges?");
+
 		return FALSE;
+	}
 
 	if (dwValue ^ mode) //only if we want to change modes
 	{
@@ -109,11 +125,13 @@ BOOL wf_mirror_driver_display_device_attach(wfInfo* wfi, DWORD mode)
 			0, REG_DWORD, (BYTE*) &dwValue, dwSize);
 
 		if (status != ERROR_SUCCESS)
-		{	
-			printf("Error writing registry key: %d ", status);
-			if (status == ERROR_ACCESS_DENIED) 
-				printf("access denied. Do you have admin privleges?");
-			printf("\n");
+		{
+			WLog_DBG(TAG, "Error writing registry key: %d ", status);
+
+			if (status == ERROR_ACCESS_DENIED)
+				WLog_DBG(TAG, "access denied. Do you have admin privleges?");
+
+			WLog_DBG(TAG, "");
 			return FALSE;
 		}
 	}
@@ -165,9 +183,9 @@ void wf_mirror_driver_print_display_change_status(LONG status)
 	}
 
 	if (status != DISP_CHANGE_SUCCESSFUL)
-		_tprintf(_T("ChangeDisplaySettingsEx() failed with %s (%d)\n"), disp_change, status);
+		WLog_ERR(TAG, "ChangeDisplaySettingsEx() failed with %s (%d)", disp_change, status);
 	else
-		_tprintf(_T("ChangeDisplaySettingsEx() succeeded with %s (%d)\n"), disp_change, status);
+		WLog_INFO(TAG, "ChangeDisplaySettingsEx() succeeded with %s (%d)", disp_change, status);
 }
 
 /**
@@ -189,11 +207,13 @@ BOOL wf_mirror_driver_update(wfInfo* wfi, int mode)
 
 	if ( (mode != MIRROR_LOAD) && (mode != MIRROR_UNLOAD) )
 	{
-		printf("Invalid mirror mode!\n");
+		WLog_DBG(TAG, "Invalid mirror mode!");
 		return FALSE;
 	}
 	
 	deviceMode = (DEVMODE*) malloc(sizeof(DEVMODE) + EXT_DEVMODE_SIZE_MAX);
+	if (!deviceMode)
+		return FALSE;
 	deviceMode->dmDriverExtra = 2 * sizeof(DWORD);
 
 	extHdr = (DWORD*)((BYTE*) &deviceMode + sizeof(DEVMODE)); 
@@ -239,18 +259,38 @@ BOOL wf_mirror_driver_map_memory(wfInfo* wfi)
 
 	if (wfi->driverDC == NULL)
 	{
-		_tprintf(_T("Could not create device driver context!\n"));
+		WLog_ERR(TAG, "Could not create device driver context!");
+		{
+			LPVOID lpMsgBuf;
+			DWORD dw = GetLastError(); 
+
+			FormatMessage(
+				FORMAT_MESSAGE_ALLOCATE_BUFFER | 
+				FORMAT_MESSAGE_FROM_SYSTEM |
+				FORMAT_MESSAGE_IGNORE_INSERTS,
+				NULL,
+				dw,
+				MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT),
+				(LPTSTR) &lpMsgBuf,
+				0, NULL );
+
+			// Display the error message and exit the process
+			WLog_ERR(TAG, "CreateDC failed on device [%s] with error %d: %s", wfi->deviceName, dw, lpMsgBuf);
+			LocalFree(lpMsgBuf);
+		}
+
 		return FALSE;
 	}
 
-	wfi->changeBuffer = malloc(sizeof(GETCHANGESBUF));
-	ZeroMemory(wfi->changeBuffer, sizeof(GETCHANGESBUF));
+	wfi->changeBuffer = calloc(1, sizeof(GETCHANGESBUF));
+	if (!wfi->changeBuffer)
+		return FALSE;
 
 	status = ExtEscape(wfi->driverDC, dmf_esc_usm_pipe_map, 0, 0, sizeof(GETCHANGESBUF), (LPSTR) wfi->changeBuffer);
 
 	if (status <= 0)
 	{
-		_tprintf(_T("Failed to map shared memory from the driver! code %d\n"), status);
+		WLog_ERR(TAG, "Failed to map shared memory from the driver! code %d", status);
 		return FALSE;
 	}
 
@@ -267,7 +307,7 @@ BOOL wf_mirror_driver_cleanup(wfInfo* wfi)
 	
 	if (status <= 0)
 	{
-		_tprintf(_T("Failed to unmap shared memory from the driver! code %d\n"), status);
+		WLog_ERR(TAG, "Failed to unmap shared memory from the driver! code %d", status);
 	}
 
 	if (wfi->driverDC != NULL)
@@ -276,7 +316,7 @@ BOOL wf_mirror_driver_cleanup(wfInfo* wfi)
 
 		if (status == 0)
 		{
-			_tprintf(_T("Failed to release DC!\n"));
+			WLog_ERR(TAG, "Failed to release DC!"));
 		}
 	}
 
@@ -289,29 +329,29 @@ BOOL wf_mirror_driver_activate(wfInfo* wfi)
 {
 	if (!wfi->mirrorDriverActive)
 	{
-		printf("Activating Mirror Driver\n");
+		WLog_DBG(TAG, "Activating Mirror Driver");
 
 		if (wf_mirror_driver_find_display_device(wfi) == FALSE)
 		{
-			printf("Could not find dfmirage mirror driver! Is it installed?\n");
+			WLog_DBG(TAG, "Could not find dfmirage mirror driver! Is it installed?");
 			return FALSE;
 		}
 
 		if (wf_mirror_driver_display_device_attach(wfi, 1) == FALSE)
 		{
-			printf("Could not attach display device!\n");
+			WLog_DBG(TAG, "Could not attach display device!");
 			return FALSE;
 		}
 
 		if (wf_mirror_driver_update(wfi, MIRROR_LOAD) == FALSE)
 		{
-			printf("could not update system with new display settings!\n");
+			WLog_DBG(TAG, "could not update system with new display settings!");
 			return FALSE;
 		}
 
 		if (wf_mirror_driver_map_memory(wfi) == FALSE)
 		{
-			printf("Unable to map memory for mirror driver!\n");
+			WLog_DBG(TAG, "Unable to map memory for mirror driver!");
 			return FALSE;
 		}
 		wfi->mirrorDriverActive = TRUE;
@@ -324,8 +364,7 @@ void wf_mirror_driver_deactivate(wfInfo* wfi)
 {
 	if (wfi->mirrorDriverActive)
 	{
-		printf("Deactivating Mirror Driver\n");
-
+		WLog_DBG(TAG, "Deactivating Mirror Driver");
 		wf_mirror_driver_cleanup(wfi);
 		wf_mirror_driver_display_device_attach(wfi, 0);
 		wf_mirror_driver_update(wfi, MIRROR_UNLOAD);

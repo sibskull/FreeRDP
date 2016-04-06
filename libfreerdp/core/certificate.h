@@ -26,6 +26,7 @@
 #include <freerdp/crypto/crypto.h>
 
 #include <freerdp/settings.h>
+#include <freerdp/log.h>
 
 #include <winpr/print.h>
 #include <winpr/stream.h>
@@ -50,18 +51,22 @@ void certificate_free_x509_certificate_chain(rdpX509CertChain* x509_cert_chain);
 
 BOOL certificate_read_server_proprietary_certificate(rdpCertificate* certificate, wStream* s);
 BOOL certificate_read_server_x509_certificate_chain(rdpCertificate* certificate, wStream* s);
-int certificate_read_server_certificate(rdpCertificate* certificate, BYTE* server_cert, int length);
+BOOL certificate_read_server_certificate(rdpCertificate* certificate, BYTE* server_cert, int length);
+
+rdpCertificate* certificate_clone(rdpCertificate* certificate);
 
 rdpCertificate* certificate_new(void);
 void certificate_free(rdpCertificate* certificate);
 
 rdpRsaKey* key_new(const char *keyfile);
+rdpRsaKey* key_new_from_content(const char *keycontent, const char *keyfile);
 void key_free(rdpRsaKey* key);
 
+#define CERTIFICATE_TAG FREERDP_TAG("core.certificate")
 #ifdef WITH_DEBUG_CERTIFICATE
-#define DEBUG_CERTIFICATE(fmt, ...) DEBUG_CLASS(CERTIFICATE, fmt, ## __VA_ARGS__)
+#define DEBUG_CERTIFICATE(fmt, ...) WLog_DBG(CERTIFICATE_TAG, fmt, ## __VA_ARGS__)
 #else
-#define DEBUG_CERTIFICATE(fmt, ...) DEBUG_NULL(fmt, ## __VA_ARGS__)
+#define DEBUG_CERTIFICATE(fmt, ...) do { } while (0)
 #endif
 
 #endif /* __CERTIFICATE_H */

@@ -40,11 +40,20 @@ int TestInitializeSecurityContext(int argc, char* argv[])
 	cbMaxLen = pPackageInfo->cbMaxToken;
 
 	identity.User = (UINT16*) _strdup(test_User);
-	identity.UserLength = sizeof(test_User);
 	identity.Domain = (UINT16*) _strdup(test_Domain);
-	identity.DomainLength = sizeof(test_Domain);
 	identity.Password = (UINT16*) _strdup(test_Password);
-	identity.PasswordLength = sizeof(test_Password);
+	if (!identity.User || !identity.Domain || !identity.Password)
+	{
+		free(identity.User);
+		free(identity.Domain);
+		free(identity.Password);
+		fprintf(stderr, "Memory allocation failed\n");
+		return -1;
+	}
+
+	identity.UserLength = strlen(test_User);
+	identity.DomainLength = strlen(test_Domain);
+	identity.PasswordLength = strlen(test_Password);
 	identity.Flags = SEC_WINNT_AUTH_IDENTITY_ANSI;
 
 	status = table->AcquireCredentialsHandle(NULL, NTLMSP_NAME,
@@ -60,6 +69,12 @@ int TestInitializeSecurityContext(int argc, char* argv[])
 	fContextReq = ISC_REQ_REPLAY_DETECT | ISC_REQ_SEQUENCE_DETECT | ISC_REQ_CONFIDENTIALITY | ISC_REQ_DELEGATE;
 
 	output_buffer = malloc(cbMaxLen);
+	if (!output_buffer)
+	{
+		printf("Memory allocation failed\n");
+		sspi_GlobalFinish();
+		return -1;
+	}
 
 	output_SecBuffer_desc.ulVersion = 0;
 	output_SecBuffer_desc.cBuffers = 1;
@@ -79,11 +94,11 @@ int TestInitializeSecurityContext(int argc, char* argv[])
 		return -1;
 	}
 
-	printf("cBuffers: %ld ulVersion: %ld\n", output_SecBuffer_desc.cBuffers, output_SecBuffer_desc.ulVersion);
+	printf("cBuffers: %d ulVersion: %d\n", output_SecBuffer_desc.cBuffers, output_SecBuffer_desc.ulVersion);
 
 	p_SecBuffer = &output_SecBuffer_desc.pBuffers[0];
 
-	printf("BufferType: 0x%04lX cbBuffer:%ld\n", p_SecBuffer->BufferType, p_SecBuffer->cbBuffer);
+	printf("BufferType: 0x%04X cbBuffer: %d\n", p_SecBuffer->BufferType, p_SecBuffer->cbBuffer);
 
 	table->FreeCredentialsHandle(&credentials);
 

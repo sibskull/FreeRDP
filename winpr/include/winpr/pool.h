@@ -81,7 +81,6 @@ typedef struct _TP_CALLBACK_ENVIRON_V1
 
 /* Non-Windows and pre Windows 7 */
 #if ((!defined(_WIN32)) || (defined(_WIN32) && (_WIN32_WINNT < 0x0601)))
-//#if !defined(_WIN32_WINNT_VISTA)
 
 typedef struct _TP_CALLBACK_ENVIRON_V3
 {
@@ -155,7 +154,7 @@ typedef VOID (*PTP_WIN32_IO_CALLBACK)(PTP_CALLBACK_INSTANCE Instance, PVOID Cont
 #endif
 
 #if (!defined(_WIN32) || ((defined(_WIN32) && (_WIN32_WINNT < 0x0601))))
-#define WINPR_THREAD_POOL 1
+#define WINPR_THREAD_POOL	1
 #endif
 
 #ifdef __cplusplus
@@ -233,6 +232,7 @@ WINPR_API VOID FreeLibraryWhenCallbackReturns(PTP_CALLBACK_INSTANCE pci, HMODULE
 WINPR_API VOID DisassociateCurrentThreadFromCallback(PTP_CALLBACK_INSTANCE pci);
 
 #endif
+
 /* Dummy */
 
 WINPR_API void winpr_pool_dummy(void);

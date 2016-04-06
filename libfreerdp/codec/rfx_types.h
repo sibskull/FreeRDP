@@ -26,22 +26,30 @@
 
 #include <winpr/crt.h>
 #include <winpr/pool.h>
+#include <winpr/wlog.h>
 #include <winpr/collections.h>
 
-#include <freerdp/utils/debug.h>
+#include <freerdp/log.h>
 #include <freerdp/utils/profiler.h>
 
+#define RFX_TAG FREERDP_TAG("codec.rfx")
 #ifdef WITH_DEBUG_RFX
-#define DEBUG_RFX(fmt, ...) DEBUG_CLASS(RFX, fmt, ## __VA_ARGS__)
+#define DEBUG_RFX(fmt, ...) WLog_DBG(RFX_TAG, fmt, ## __VA_ARGS__)
 #else
-#define DEBUG_RFX(fmt, ...) DEBUG_NULL(fmt, ## __VA_ARGS__)
+#define DEBUG_RFX(fmt, ...) do { } while (0)
 #endif
+
+typedef struct _RFX_TILE_COMPOSE_WORK_PARAM RFX_TILE_COMPOSE_WORK_PARAM;
 
 struct _RFX_CONTEXT_PRIV
 {
-	wQueue* TilePool;
+	wLog* log;
+	wObjectPool* TilePool;
 
 	BOOL UseThreads;
+	PTP_WORK* workObjects;
+	RFX_TILE_COMPOSE_WORK_PARAM* tileWorkParams;
+
 	DWORD MinThreadCount;
 	DWORD MaxThreadCount;
 
@@ -49,7 +57,6 @@ struct _RFX_CONTEXT_PRIV
 	TP_CALLBACK_ENVIRON ThreadPoolEnv;
  
 	wBufferPool* BufferPool;
-	wStreamPool* EncoderStreamPool;
 
 	/* profilers */
 	PROFILER_DEFINE(prof_rfx_decode_rgb);

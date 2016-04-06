@@ -24,6 +24,7 @@
 #include <freerdp/freerdp.h>
 #include <freerdp/constants.h>
 #include <freerdp/utils/event.h>
+
 #include <freerdp/client/file.h>
 #include <freerdp/client/cmdline.h>
 #include <freerdp/client/channels.h>
@@ -37,6 +38,9 @@
 
 #include "dfreerdp.h"
 
+#include <freerdp/log.h>
+#define TAG CLIENT_TAG("directFB")
+
 static HANDLE g_sem;
 static int g_thread_count = 0;
 
@@ -45,15 +49,22 @@ struct thread_data
 	freerdp* instance;
 };
 
-int df_context_new(freerdp* instance, rdpContext* context)
+BOOL df_context_new(freerdp* instance, rdpContext* context)
 {
-	context->channels = freerdp_channels_new();
-	return 0;
+	if (!(context->channels = freerdp_channels_new()))
+		return FALSE;
+
+	return TRUE;
 }
 
 void df_context_free(freerdp* instance, rdpContext* context)
 {
-
+	if (context && context->channels)
+	{
+		freerdp_channels_close(context->channels, instance);
+		freerdp_channels_free(context->channels);
+		context->channels = NULL;
+	}
 }
 
 void df_begin_paint(rdpContext* context)
@@ -166,11 +177,10 @@ BOOL df_pre_connect(freerdp* instance)
 	dfi->clrconv->palette = (rdpPalette*) malloc(sizeof(rdpPalette));
 	ZeroMemory(dfi->clrconv->palette, sizeof(rdpPalette));
 
-	freerdp_channels_pre_connect(instance->context->channels, instance);
+	if (freerdp_channels_pre_connect(instance->context->channels, instance) != CHANNEL_RC_OK)
+		return FALSE;
 
-	instance->context->cache = cache_new(instance->settings);
-
-	return TRUE;
+	return (instance->context->cache = cache_new(instance->settings)) != NULL;
 }
 
 BOOL df_post_connect(freerdp* instance)
@@ -182,7 +192,9 @@ BOOL df_post_connect(freerdp* instance)
 	context = ((dfContext*) instance->context);
 	dfi = context->dfi;
 
-	gdi_init(instance, CLRCONV_ALPHA | CLRCONV_INVERT | CLRBUF_16BPP | CLRBUF_32BPP, NULL);
+	if (!gdi_init(instance, CLRCONV_ALPHA | CLRCONV_INVERT | CLRBUF_16BPP | CLRBUF_32BPP, NULL))
+		return FALSE;
+
 	gdi = instance->context->gdi;
 
 	dfi->err = DirectFBCreate(&(dfi->dfb));
@@ -224,26 +236,23 @@ BOOL df_post_connect(freerdp* instance)
 	pointer_cache_register_callbacks(instance->update);
 	df_register_graphics(instance->context->graphics);
 
-	freerdp_channels_post_connect(instance->context->channels, instance);
-
-	return TRUE;
+	return freerdp_channels_post_connect(instance->context->channels, instance) == CHANNEL_RC_OK;
 }
 
 BOOL df_verify_certificate(freerdp* instance, char* subject, char* issuer, char* fingerprint)
 {
 	char answer;
-
-	printf("Certificate details:\n");
-	printf("\tSubject: %s\n", subject);
-	printf("\tIssuer: %s\n", issuer);
-	printf("\tThumbprint: %s\n", fingerprint);
-	printf("The above X.509 certificate could not be verified, possibly because you do not have "
-		"the CA certificate in your certificate store, or the certificate has expired. "
-		"Please look at the documentation on how to create local certificate store for a private CA.\n");
+	WLog_INFO(TAG, "Certificate details:");
+	WLog_INFO(TAG, "\tSubject: %s", subject);
+	WLog_INFO(TAG, "\tIssuer: %s", issuer);
+	WLog_INFO(TAG, "\tThumbprint: %s", fingerprint);
+	WLog_INFO(TAG, "The above X.509 certificate could not be verified, possibly because you do not have "
+			  "the CA certificate in your certificate store, or the certificate has expired. "
+			  "Please look at the documentation on how to create local certificate store for a private CA.");
 
 	while (1)
 	{
-		printf("Do you trust the above certificate? (Y/N) ");
+		WLog_INFO(TAG, "Do you trust the above certificate? (Y/N) ");
 		answer = fgetc(stdin);
 
 		if (answer == 'y' || answer == 'Y')
@@ -259,7 +268,7 @@ BOOL df_verify_certificate(freerdp* instance, char* subject, char* issuer, char*
 	return FALSE;
 }
 
-static int df_receive_channel_data(freerdp* instance, int channelId, BYTE* data, int size, int flags, int total_size)
+static int df_receive_channel_data(freerdp* instance, UINT16 channelId, BYTE* data, int size, int flags, int total_size)
 {
 	return freerdp_channels_data(instance, channelId, data, size, flags, total_size);
 }
@@ -292,7 +301,7 @@ static void df_process_channel_event(rdpChannels* channels, freerdp* instance)
 				break;
 
 			default:
-				fprintf(stderr, "df_process_channel_event: unknown event type %d\n", GetMessageType(event->id));
+				WLog_ERR(TAG, "df_process_channel_event: unknown event type %d", GetMessageType(event->id));
 				break;
 		}
 
@@ -339,17 +348,17 @@ int dfreerdp_run(freerdp* instance)
 
 		if (freerdp_get_fds(instance, rfds, &rcount, wfds, &wcount) != TRUE)
 		{
-			fprintf(stderr, "Failed to get FreeRDP file descriptor\n");
+			WLog_ERR(TAG, "Failed to get FreeRDP file descriptor");
 			break;
 		}
 		if (freerdp_channels_get_fds(channels, instance, rfds, &rcount, wfds, &wcount) != TRUE)
 		{
-			fprintf(stderr, "Failed to get channel manager file descriptor\n");
+			WLog_ERR(TAG, "Failed to get channel manager file descriptor");
 			break;
 		}
 		if (df_get_fds(instance, rfds, &rcount, wfds, &wcount) != TRUE)
 		{
-			fprintf(stderr, "Failed to get dfreerdp file descriptor\n");
+			WLog_ERR(TAG, "Failed to get dfreerdp file descriptor");
 			break;
 		}
 
@@ -378,28 +387,31 @@ int dfreerdp_run(freerdp* instance)
 				(errno == EINPROGRESS) ||
 				(errno == EINTR))) /* signal occurred */
 			{
-				fprintf(stderr, "dfreerdp_run: select failed\n");
+				WLog_ERR(TAG, "dfreerdp_run: select failed");
 				break;
 			}
 		}
 
 		if (freerdp_check_fds(instance) != TRUE)
 		{
-			fprintf(stderr, "Failed to check FreeRDP file descriptor\n");
+			WLog_ERR(TAG, "Failed to check FreeRDP file descriptor");
 			break;
 		}
 		if (df_check_fds(instance, &rfds_set) != TRUE)
 		{
-			fprintf(stderr, "Failed to check dfreerdp file descriptor\n");
+			WLog_ERR(TAG, "Failed to check dfreerdp file descriptor");
 			break;
 		}
 		if (freerdp_channels_check_fds(channels, instance) != TRUE)
 		{
-			fprintf(stderr, "Failed to check channel manager file descriptor\n");
+			WLog_ERR(TAG, "Failed to check channel manager file descriptor");
 			break;
 		}
 		df_process_channel_event(channels, instance);
 	}
+
+	freerdp_channels_disconnect(channels, instance);
+	freerdp_disconnect(instance);
 
 	freerdp_channels_close(channels, instance);
 	freerdp_channels_free(channels);
@@ -441,9 +453,11 @@ int main(int argc, char* argv[])
 
 	setlocale(LC_ALL, "");
 
-	freerdp_channels_global_init();
-
-	g_sem = CreateSemaphore(NULL, 0, 1, NULL);
+	if (!(g_sem = CreateSemaphore(NULL, 0, 1, NULL)))
+	{
+		WLog_ERR(TAG, "Failed to create semaphore");
+		exit(1);
+	}
 
 	instance = freerdp_new();
 	instance->PreConnect = df_pre_connect;
@@ -454,7 +468,12 @@ int main(int argc, char* argv[])
 	instance->ContextSize = sizeof(dfContext);
 	instance->ContextNew = df_context_new;
 	instance->ContextFree = df_context_free;
-	freerdp_context_new(instance);
+
+	if (!freerdp_context_new(instance))
+	{
+		WLog_ERR(TAG, "Failed to create FreeRDP context");
+		exit(1);
+	}
 
 	context = (dfContext*) instance->context;
 	channels = instance->context->channels;
@@ -464,12 +483,13 @@ int main(int argc, char* argv[])
 	instance->context->argc = argc;
 	instance->context->argv = argv;
 
-	status = freerdp_client_parse_command_line_arguments(argc, argv, instance->settings);
+	status = freerdp_client_settings_parse_command_line(instance->settings, argc, argv, FALSE);
 
 	if (status < 0)
 		exit(0);
 
-	freerdp_client_load_addins(instance->context->channels, instance->settings);
+	if (!freerdp_client_load_addins(instance->context->channels, instance->settings))
+		exit(-1);
 
 	data = (struct thread_data*) malloc(sizeof(struct thread_data));
 	ZeroMemory(data, sizeof(sizeof(struct thread_data)));
@@ -483,8 +503,6 @@ int main(int argc, char* argv[])
 	{
 		WaitForSingleObject(g_sem, INFINITE);
 	}
-
-	freerdp_channels_global_uninit();
 
 	return 0;
 }

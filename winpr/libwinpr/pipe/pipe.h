@@ -23,8 +23,10 @@
 #ifndef _WIN32
 
 #include <winpr/pipe.h>
+#include <winpr/collections.h>
 
 #include "../handle/handle.h"
+
 
 struct winpr_pipe
 {
@@ -33,6 +35,41 @@ struct winpr_pipe
 	int fd;
 };
 typedef struct winpr_pipe WINPR_PIPE;
+
+typedef struct winpr_named_pipe WINPR_NAMED_PIPE;
+
+typedef void(*fnUnrefNamedPipe)(WINPR_NAMED_PIPE* pNamedPipe);
+
+struct winpr_named_pipe
+{
+	WINPR_HANDLE_DEF();
+
+	int clientfd;
+	int serverfd;
+
+	char* name;
+	char* lpFileName;
+	char* lpFilePath;
+
+	BOOL ServerMode;
+	DWORD dwOpenMode;
+	DWORD dwPipeMode;
+	DWORD nMaxInstances;
+	DWORD nOutBufferSize;
+	DWORD nInBufferSize;
+	DWORD nDefaultTimeOut;
+	DWORD dwFlagsAndAttributes;
+	LPOVERLAPPED lpOverlapped;
+
+	fnUnrefNamedPipe pfnUnrefNamedPipe;
+};
+
+BOOL winpr_destroy_named_pipe(WINPR_NAMED_PIPE* pNamedPipe);
+
+BOOL NamedPipeRead(PVOID Object, LPVOID lpBuffer, DWORD nNumberOfBytesToRead,
+					LPDWORD lpNumberOfBytesRead, LPOVERLAPPED lpOverlapped);
+BOOL NamedPipeWrite(PVOID Object, LPCVOID lpBuffer, DWORD nNumberOfBytesToWrite,
+						LPDWORD lpNumberOfBytesWritten, LPOVERLAPPED lpOverlapped);
 
 #endif
 

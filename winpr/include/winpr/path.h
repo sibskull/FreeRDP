@@ -242,14 +242,19 @@ WINPR_API HRESULT NativePathAllocCombineW(PCWSTR pszPathIn, PCWSTR pszMore, unsi
 WINPR_API HRESULT PathCchConvertStyleA(PSTR pszPath, size_t cchPath, unsigned long dwFlags);
 WINPR_API HRESULT PathCchConvertStyleW(PWSTR pszPath, size_t cchPath, unsigned long dwFlags);
 
+WINPR_API char PathGetSeparatorA(unsigned long dwFlags);
+WINPR_API WCHAR PathGetSeparatorW(unsigned long dwFlags);
+
 WINPR_API PCSTR PathGetSharedLibraryExtensionA(unsigned long dwFlags);
 WINPR_API PCWSTR PathGetSharedLibraryExtensionW(unsigned long dwFlags);
 
 #ifdef UNICODE
 #define PathCchConvertStyle		PathCchConvertStyleW
+#define PathGetSeparator		PathGetSeparatorW
 #define PathGetSharedLibraryExtension	PathGetSharedLibraryExtensionW
 #else
 #define PathCchConvertStyle		PathCchConvertStyleA
+#define PathGetSeparator		PathGetSeparatorW
 #define PathGetSharedLibraryExtension	PathGetSharedLibraryExtensionA
 #endif
 
@@ -275,24 +280,30 @@ extern "C" {
 #endif
 
 WINPR_API char* GetKnownPath(int id);
-WINPR_API char* GetKnownSubPath(int id, char* path);
-WINPR_API char* GetCombinedPath(char* basePath, char* subPath);
+WINPR_API char* GetKnownSubPath(int id, const char* path);
+WINPR_API char* GetEnvironmentPath(char* name);
+WINPR_API char* GetEnvironmentSubPath(char* name, const char* path);
+WINPR_API char* GetCombinedPath(const char* basePath, const char* subPath);
 
-//#ifndef _WIN32
+WINPR_API BOOL PathMakePathA(LPCSTR path, LPSECURITY_ATTRIBUTES lpAttributes);
 
+#ifndef WIN32
 WINPR_API BOOL PathFileExistsA(LPCSTR pszPath);
 WINPR_API BOOL PathFileExistsW(LPCWSTR pszPath);
+#endif
 
 #ifdef __cplusplus
 }
 #endif
 
+#ifdef WIN32
+#include <Shlwapi.h>
+#else
 #ifdef UNICODE
 #define PathFileExists	PathFileExistsW
 #else
 #define PathFileExists	PathFileExistsA
 #endif
-
-//#endif
+#endif
 
 #endif /* WINPR_PATH_H */

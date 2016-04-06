@@ -3,6 +3,8 @@
  * Synchronization Functions
  *
  * Copyright 2012 Marc-Andre Moreau <marcandre.moreau@gmail.com>
+ * Copyright 2014 Thincast Technologies GmbH
+ * Copyright 2014 Norbert Federa <norbert.federa@thincast.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,6 +30,8 @@
 #include <winpr/wtypes.h>
 #include <winpr/error.h>
 #include <winpr/handle.h>
+
+#include <winpr/nt.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -100,22 +104,6 @@ WINPR_API BOOL ResetEvent(HANDLE hEvent);
 #define OpenEvent		OpenEventA
 #endif
 
-/* One-Time Initialization */
-
-typedef union _RTL_RUN_ONCE
-{
-	PVOID Ptr;
-} RTL_RUN_ONCE, *PRTL_RUN_ONCE;
-
-typedef PRTL_RUN_ONCE PINIT_ONCE;
-typedef PRTL_RUN_ONCE LPINIT_ONCE;
-typedef BOOL CALLBACK (*PINIT_ONCE_FN) (PINIT_ONCE InitOnce, PVOID Parameter, PVOID* Context);
-
-WINPR_API BOOL InitOnceBeginInitialize(LPINIT_ONCE lpInitOnce, DWORD dwFlags, PBOOL fPending, LPVOID* lpContext);
-WINPR_API BOOL InitOnceComplete(LPINIT_ONCE lpInitOnce, DWORD dwFlags, LPVOID lpContext);
-WINPR_API BOOL InitOnceExecuteOnce(PINIT_ONCE InitOnce, PINIT_ONCE_FN InitFn, PVOID Parameter, LPVOID* Context);
-WINPR_API VOID InitOnceInitialize(PINIT_ONCE InitOnce);
-
 /* Slim Reader/Writer (SRW) Lock */
 
 typedef PVOID RTL_SRWLOCK;
@@ -174,15 +162,6 @@ WINPR_API VOID LeaveCriticalSection(LPCRITICAL_SECTION lpCriticalSection);
 
 WINPR_API VOID DeleteCriticalSection(LPCRITICAL_SECTION lpCriticalSection);
 
-/* Synchronization Barrier */
-
-typedef PVOID RTL_SYNCHRONIZATION_BARRIER;
-typedef RTL_SYNCHRONIZATION_BARRIER SYNCHRONIZATION_BARRIER, *PSYNCHRONIZATION_BARRIER, *LPSYNCHRONIZATION_BARRIER;
-
-WINPR_API BOOL InitializeSynchronizationBarrier(LPSYNCHRONIZATION_BARRIER lpBarrier, LONG lTotalThreads, LONG lSpinCount);
-WINPR_API BOOL EnterSynchronizationBarrier(LPSYNCHRONIZATION_BARRIER lpBarrier, DWORD dwFlags);
-WINPR_API BOOL DeleteSynchronizationBarrier(LPSYNCHRONIZATION_BARRIER lpBarrier);
-
 /* Sleep */
 
 WINPR_API VOID Sleep(DWORD dwMilliseconds);
@@ -208,6 +187,8 @@ WINPR_API BOOL WaitOnAddress(VOID volatile *Address, PVOID CompareAddress, SIZE_
 
 #define WAIT_FAILED		((DWORD) 0xFFFFFFFF)
 
+#define MAXIMUM_WAIT_OBJECTS	64
+
 WINPR_API DWORD WaitForSingleObject(HANDLE hHandle, DWORD dwMilliseconds);
 WINPR_API DWORD WaitForSingleObjectEx(HANDLE hHandle, DWORD dwMilliseconds, BOOL bAlertable);
 WINPR_API DWORD WaitForMultipleObjects(DWORD nCount, const HANDLE* lpHandles, BOOL bWaitAll, DWORD dwMilliseconds);
@@ -216,6 +197,8 @@ WINPR_API DWORD WaitForMultipleObjectsEx(DWORD nCount, const HANDLE* lpHandles, 
 WINPR_API DWORD SignalObjectAndWait(HANDLE hObjectToSignal, HANDLE hObjectToWaitOn, DWORD dwMilliseconds, BOOL bAlertable);
 
 /* Waitable Timer */
+
+#define CREATE_WAITABLE_TIMER_MANUAL_RESET		0x00000001
 
 typedef struct _REASON_CONTEXT
 {
@@ -238,6 +221,9 @@ typedef struct _REASON_CONTEXT
 
 typedef VOID (*PTIMERAPCROUTINE)(LPVOID lpArgToCompletionRoutine, DWORD dwTimerLowValue, DWORD dwTimerHighValue);
 
+WINPR_API HANDLE CreateWaitableTimerA(LPSECURITY_ATTRIBUTES lpTimerAttributes, BOOL bManualReset, LPCSTR lpTimerName);
+WINPR_API HANDLE CreateWaitableTimerW(LPSECURITY_ATTRIBUTES lpTimerAttributes, BOOL bManualReset, LPCWSTR lpTimerName);
+
 WINPR_API HANDLE CreateWaitableTimerExA(LPSECURITY_ATTRIBUTES lpTimerAttributes, LPCSTR lpTimerName, DWORD dwFlags, DWORD dwDesiredAccess);
 WINPR_API HANDLE CreateWaitableTimerExW(LPSECURITY_ATTRIBUTES lpTimerAttributes, LPCWSTR lpTimerName, DWORD dwFlags, DWORD dwDesiredAccess);
 
@@ -253,23 +239,107 @@ WINPR_API HANDLE OpenWaitableTimerW(DWORD dwDesiredAccess, BOOL bInheritHandle, 
 WINPR_API BOOL CancelWaitableTimer(HANDLE hTimer);
 
 #ifdef UNICODE
+#define CreateWaitableTimer		CreateWaitableTimerW
 #define CreateWaitableTimerEx		CreateWaitableTimerExW
 #define OpenWaitableTimer		OpenWaitableTimerW
 #else
+#define CreateWaitableTimer		CreateWaitableTimerA
 #define CreateWaitableTimerEx		CreateWaitableTimerExA
 #define OpenWaitableTimer		OpenWaitableTimerA
 #endif
 
+/**
+ * Timer-Queue Timer
+ */
+
+#define WT_EXECUTEDEFAULT			0x00000000
+#define WT_EXECUTEINIOTHREAD			0x00000001
+#define WT_EXECUTEINUITHREAD			0x00000002
+#define WT_EXECUTEINWAITTHREAD			0x00000004
+#define WT_EXECUTEONLYONCE			0x00000008
+#define WT_EXECUTELONGFUNCTION			0x00000010
+#define WT_EXECUTEINTIMERTHREAD			0x00000020
+#define WT_EXECUTEINPERSISTENTIOTHREAD		0x00000040
+#define WT_EXECUTEINPERSISTENTTHREAD		0x00000080
+#define WT_TRANSFER_IMPERSONATION		0x00000100
+
+typedef VOID (*WAITORTIMERCALLBACK)(PVOID lpParameter, BOOLEAN TimerOrWaitFired);
+
+WINPR_API HANDLE CreateTimerQueue(void);
+WINPR_API BOOL DeleteTimerQueue(HANDLE TimerQueue);
+WINPR_API BOOL DeleteTimerQueueEx(HANDLE TimerQueue, HANDLE CompletionEvent);
+
+WINPR_API BOOL CreateTimerQueueTimer(PHANDLE phNewTimer, HANDLE TimerQueue,
+		WAITORTIMERCALLBACK Callback, PVOID Parameter, DWORD DueTime, DWORD Period, ULONG Flags);
+WINPR_API BOOL ChangeTimerQueueTimer(HANDLE TimerQueue, HANDLE Timer, ULONG DueTime, ULONG Period);
+WINPR_API BOOL DeleteTimerQueueTimer(HANDLE TimerQueue, HANDLE Timer, HANDLE CompletionEvent);
+
 #endif
 
+#if (defined(_WIN32) && (_WIN32_WINNT < 0x0600))
+
+WINPR_API BOOL InitializeCriticalSectionEx(LPCRITICAL_SECTION lpCriticalSection, DWORD dwSpinCount, DWORD Flags);
+
+#endif
+
+#if (!defined(_WIN32)) || (defined(_WIN32) && (_WIN32_WINNT < 0x0600))
+
+/* One-Time Initialization */
+
+typedef struct _RTL_RUN_ONCE
+{
+	PVOID Ptr;
+} RTL_RUN_ONCE, *PRTL_RUN_ONCE;
+
+#define RTL_RUN_ONCE_INIT	{ 0 }
+#define INIT_ONCE_STATIC_INIT	RTL_RUN_ONCE_INIT
+
+typedef RTL_RUN_ONCE INIT_ONCE;
+typedef PRTL_RUN_ONCE PINIT_ONCE;
+typedef PRTL_RUN_ONCE LPINIT_ONCE;
+typedef BOOL CALLBACK (*PINIT_ONCE_FN) (PINIT_ONCE InitOnce, PVOID Parameter, PVOID* Context);
+
+WINPR_API BOOL InitOnceBeginInitialize(LPINIT_ONCE lpInitOnce, DWORD dwFlags, PBOOL fPending, LPVOID* lpContext);
+WINPR_API BOOL InitOnceComplete(LPINIT_ONCE lpInitOnce, DWORD dwFlags, LPVOID lpContext);
+WINPR_API BOOL InitOnceExecuteOnce(PINIT_ONCE InitOnce, PINIT_ONCE_FN InitFn, PVOID Parameter, LPVOID* Context);
+WINPR_API VOID InitOnceInitialize(PINIT_ONCE InitOnce);
+
+#endif
+
+/* Synchronization Barrier */
+
+#if (!defined(_WIN32)) || (defined(_WIN32) && (_WIN32_WINNT < 0x0602))
+
+typedef struct _RTL_BARRIER
+{
+	DWORD Reserved1;
+	DWORD Reserved2;
+	ULONG_PTR Reserved3[2];
+	DWORD Reserved4;
+	DWORD Reserved5;
+} RTL_BARRIER, *PRTL_BARRIER;
+
+typedef RTL_BARRIER SYNCHRONIZATION_BARRIER;
+typedef PRTL_BARRIER PSYNCHRONIZATION_BARRIER;
+typedef PRTL_BARRIER LPSYNCHRONIZATION_BARRIER;
+
+#define SYNCHRONIZATION_BARRIER_FLAGS_SPIN_ONLY		0x01
+#define SYNCHRONIZATION_BARRIER_FLAGS_BLOCK_ONLY	0x02
+#define SYNCHRONIZATION_BARRIER_FLAGS_NO_DELETE		0x04
+
+WINPR_API BOOL WINAPI InitializeSynchronizationBarrier(LPSYNCHRONIZATION_BARRIER lpBarrier, LONG lTotalThreads, LONG lSpinCount);
+WINPR_API BOOL WINAPI EnterSynchronizationBarrier(LPSYNCHRONIZATION_BARRIER lpBarrier, DWORD dwFlags);
+WINPR_API BOOL WINAPI DeleteSynchronizationBarrier(LPSYNCHRONIZATION_BARRIER lpBarrier);
+
+#endif
 /* Extended API */
 
 WINPR_API VOID USleep(DWORD dwMicroseconds);
 
 WINPR_API HANDLE CreateFileDescriptorEventW(LPSECURITY_ATTRIBUTES lpEventAttributes,
-		BOOL bManualReset, BOOL bInitialState, int FileDescriptor);
+		BOOL bManualReset, BOOL bInitialState, int FileDescriptor, ULONG mode);
 WINPR_API HANDLE CreateFileDescriptorEventA(LPSECURITY_ATTRIBUTES lpEventAttributes,
-		BOOL bManualReset, BOOL bInitialState, int FileDescriptor);
+		BOOL bManualReset, BOOL bInitialState, int FileDescriptor, ULONG mode);
 
 WINPR_API HANDLE CreateWaitObjectEvent(LPSECURITY_ATTRIBUTES lpEventAttributes,
 		BOOL bManualReset, BOOL bInitialState, void* pObject);
@@ -281,7 +351,7 @@ WINPR_API HANDLE CreateWaitObjectEvent(LPSECURITY_ATTRIBUTES lpEventAttributes,
 #endif
 
 WINPR_API int GetEventFileDescriptor(HANDLE hEvent);
-WINPR_API int SetEventFileDescriptor(HANDLE hEvent, int FileDescriptor);
+WINPR_API int SetEventFileDescriptor(HANDLE hEvent, int FileDescriptor, ULONG mode);
 
 WINPR_API void* GetEventWaitObject(HANDLE hEvent);
 

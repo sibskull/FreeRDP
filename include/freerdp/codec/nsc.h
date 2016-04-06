@@ -31,46 +31,71 @@
 extern "C" {
 #endif
 
-/* NSCODEC_BITMAP_STREAM */
-struct _NSC_STREAM
+struct _NSC_MESSAGE
 {
-	UINT32 PlaneByteCount[4];
-	BYTE ColorLossLevel;
-	BYTE ChromaSubSamplingLevel;
-	UINT16 Reserved;
-	BYTE* Planes;
+	int x;
+	int y;
+	UINT32 width;
+	UINT32 height;
+	BYTE* data;
+	int scanline;
+	BYTE* PlaneBuffer;
+	UINT32 MaxPlaneSize;
+	BYTE* PlaneBuffers[5];
+	UINT32 OrgByteCount[4];
+
+	UINT32 LumaPlaneByteCount;
+	UINT32 OrangeChromaPlaneByteCount;
+	UINT32 GreenChromaPlaneByteCount;
+	UINT32 AlphaPlaneByteCount;
+	UINT32 ColorLossLevel;
+	UINT32 ChromaSubsamplingLevel;
 };
-typedef struct _NSC_STREAM NSC_STREAM;
+typedef struct _NSC_MESSAGE NSC_MESSAGE;
 
 typedef struct _NSC_CONTEXT_PRIV NSC_CONTEXT_PRIV;
 
 typedef struct _NSC_CONTEXT NSC_CONTEXT;
+
 struct _NSC_CONTEXT
 {
-	UINT32 OrgByteCount[4];	/* original byte length of luma, chroma orange, chroma green, alpha variable in order */
-	NSC_STREAM nsc_stream;
+	UINT32 OrgByteCount[4];
 	UINT16 bpp;
 	UINT16 width;
 	UINT16 height;
-	BYTE* bmpdata;     /* final argb values in little endian order */
-	UINT32 bmpdata_length; /* the maximum length of the buffer that bmpdata points to */
+	BYTE* BitmapData;
+	UINT32 BitmapDataLength;
 	RDP_PIXEL_FORMAT pixel_format;
+
+	BYTE* Planes;
+	UINT32 PlaneByteCount[4];
+	UINT32 ColorLossLevel;
+	UINT32 ChromaSubsamplingLevel;
+	BOOL DynamicColorFidelity;
 
 	/* color palette allocated by the application */
 	const BYTE* palette;
 
 	void (*decode)(NSC_CONTEXT* context);
-	void (*encode)(NSC_CONTEXT* context, BYTE* bmpdata, int rowstride);
+	void (*encode)(NSC_CONTEXT* context, BYTE* BitmapData, int rowstride);
 
 	NSC_CONTEXT_PRIV* priv;
 };
 
-FREERDP_API NSC_CONTEXT* nsc_context_new(void);
 FREERDP_API void nsc_context_set_pixel_format(NSC_CONTEXT* context, RDP_PIXEL_FORMAT pixel_format);
-FREERDP_API void nsc_process_message(NSC_CONTEXT* context, UINT16 bpp,
+FREERDP_API int nsc_process_message(NSC_CONTEXT* context, UINT16 bpp,
 	UINT16 width, UINT16 height, BYTE* data, UINT32 length);
 FREERDP_API void nsc_compose_message(NSC_CONTEXT* context, wStream* s,
 	BYTE* bmpdata, int width, int height, int rowstride);
+
+FREERDP_API NSC_MESSAGE* nsc_encode_messages(NSC_CONTEXT* context, BYTE* data, int x, int y,
+		int width, int height, int scanline, int* numMessages, int maxDataSize);
+FREERDP_API int nsc_write_message(NSC_CONTEXT* context, wStream* s, NSC_MESSAGE* message);
+FREERDP_API int nsc_message_free(NSC_CONTEXT* context, NSC_MESSAGE* message);
+
+FREERDP_API BOOL nsc_context_reset(NSC_CONTEXT* context, UINT32 width, UINT32 height);
+
+FREERDP_API NSC_CONTEXT* nsc_context_new(void);
 FREERDP_API void nsc_context_free(NSC_CONTEXT* context);
 
 #ifdef __cplusplus

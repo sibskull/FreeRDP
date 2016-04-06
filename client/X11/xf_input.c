@@ -21,6 +21,13 @@
 #include "config.h"
 #endif
 
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
+
+#ifdef WITH_XCURSOR
+#include <X11/Xcursor/Xcursor.h>
+#endif
+
 #ifdef WITH_XI
 #include <X11/extensions/XInput2.h>
 #endif
@@ -28,12 +35,19 @@
 #include <math.h>
 
 #include "xf_event.h"
-
 #include "xf_input.h"
+
+#include <freerdp/log.h>
+#define TAG CLIENT_TAG("x11")
 
 #ifdef WITH_XI
 
 #define MAX_CONTACTS 2
+
+#define PAN_THRESHOLD 50
+#define ZOOM_THRESHOLD 10
+
+#define MIN_FINGER_DIST 5
 
 typedef struct touch_contact
 {
@@ -49,10 +63,15 @@ typedef struct touch_contact
 touchContact contacts[MAX_CONTACTS];
 
 int active_contacts;
+int lastEvType;
 XIDeviceEvent lastEvent;
 double firstDist = -1.0;
 double lastDist;
+
 double z_vector;
+double px_vector;
+double py_vector;
+
 int xinput_opcode;
 int scale_cnt;
 
@@ -72,6 +91,7 @@ const char* xf_input_get_class_string(int class)
 	return "XIUnknownClass";
 }
 
+
 int xf_input_init(xfContext* xfc, Window window)
 {
 	int i, j;
@@ -85,6 +105,10 @@ int xf_input_init(xfContext* xfc, Window window)
 	int opcode, event, error;
 	BYTE masks[8][XIMaskLen(XI_LASTEVENT)];
 
+	z_vector = 0;
+	px_vector = 0;
+	py_vector = 0;
+
 	nmasks = 0;
 	ndevices = 0;
 	active_contacts = 0;
@@ -92,7 +116,7 @@ int xf_input_init(xfContext* xfc, Window window)
 
 	if (!XQueryExtension(xfc->display, "XInputExtension", &opcode, &event, &error))
 	{
-		printf("XInput extension not available.\n");
+		WLog_WARN(TAG, "XInput extension not available.");
 		return -1;
 	}
 
@@ -102,7 +126,7 @@ int xf_input_init(xfContext* xfc, Window window)
 
 	if (major * 1000 + minor < 2002)
 	{
-		printf("Server does not support XI 2.2\n");
+		WLog_WARN(TAG, "Server does not support XI 2.2");
 		return -1;
 	}
 
@@ -122,7 +146,7 @@ int xf_input_init(xfContext* xfc, Window window)
 			XITouchClassInfo* t = (XITouchClassInfo*) class;
 
 			if ((class->type == XITouchClass) && (t->mode == XIDirectTouch) &&
-				(strcmp(dev->name, "Virtual core pointer") != 0))
+			    (strcmp(dev->name, "Virtual core pointer") != 0))
 			{
 				touch = TRUE;
 			}
@@ -135,9 +159,9 @@ int xf_input_init(xfContext* xfc, Window window)
 
 			if (xfc->settings->MultiTouchInput)
 			{
-				printf("%s (%d) \"%s\" id: %d\n",
-						xf_input_get_class_string(class->type),
-						class->type, dev->name, dev->deviceid);
+				WLog_INFO(TAG, "%s (%d) \"%s\" id: %d",
+						  xf_input_get_class_string(class->type),
+						  class->type, dev->name, dev->deviceid);
 			}
 
 			evmasks[nmasks].mask = masks[nmasks];
@@ -146,13 +170,13 @@ int xf_input_init(xfContext* xfc, Window window)
 			evmasks[nmasks].deviceid = dev->deviceid;
 
 			if ((class->type == XITouchClass) && (t->mode == XIDirectTouch) &&
-					(strcmp(dev->name, "Virtual core pointer") != 0))
+			    (strcmp(dev->name, "Virtual core pointer") != 0))
 			{
 				if (xfc->settings->MultiTouchInput)
 				{
-					printf("%s %s touch device (id: %d, mode: %d), supporting %d touches.\n",
-						dev->name, (t->mode == XIDirectTouch) ? "direct" : "dependent",
-						dev->deviceid, t->mode, t->num_touches);
+					WLog_INFO(TAG, "%s %s touch device (id: %d, mode: %d), supporting %d touches.",
+							  dev->name, (t->mode == XIDirectTouch) ? "direct" : "dependent",
+							  dev->deviceid, t->mode, t->num_touches);
 				}
 
 				XISetMask(masks[nmasks], XI_TouchBegin);
@@ -165,9 +189,9 @@ int xf_input_init(xfContext* xfc, Window window)
 			{
 				if (!touch && (class->type == XIButtonClass) && strcmp(dev->name, "Virtual core pointer"))
 				{
-					printf("%s button device (id: %d, mode: %d)\n",
-						dev->name,
-						dev->deviceid, t->mode);
+					WLog_INFO(TAG, "%s button device (id: %d, mode: %d)",
+							  dev->name,
+							  dev->deviceid, t->mode);
 					XISetMask(masks[nmasks], XI_ButtonPress);
 					XISetMask(masks[nmasks], XI_ButtonRelease);
 					XISetMask(masks[nmasks], XI_Motion);
@@ -176,6 +200,7 @@ int xf_input_init(xfContext* xfc, Window window)
 			}
 		}
 	}
+	XIFreeDeviceInfo(info);
 
 	if (nmasks > 0)
 		xstatus = XISelectEvents(xfc->display, window, evmasks, nmasks);
@@ -183,12 +208,18 @@ int xf_input_init(xfContext* xfc, Window window)
 	return 0;
 }
 
-BOOL xf_input_is_duplicate(XIDeviceEvent* event)
+BOOL xf_input_is_duplicate(XGenericEventCookie* cookie)
 {
+	XIDeviceEvent* event;
+
+	event = cookie->data;
+
+
 	if ( (lastEvent.time == event->time) &&
-			(lastEvent.detail == event->detail) &&
-			(lastEvent.event_x == event->event_x) &&
-			(lastEvent.event_y == event->event_y) )
+	    (lastEvType == cookie->evtype) &&
+	    (lastEvent.detail == event->detail) &&
+	    (lastEvent.event_x == event->event_x) &&
+	    (lastEvent.event_y == event->event_y) )
 	{
 		return TRUE;
 	}
@@ -196,20 +227,137 @@ BOOL xf_input_is_duplicate(XIDeviceEvent* event)
 	return FALSE;
 }
 
-void xf_input_save_last_event(XIDeviceEvent* event)
+void xf_input_save_last_event(XGenericEventCookie* cookie)
 {
+	XIDeviceEvent* event;
+
+	event = cookie->data;
+
+	lastEvType = cookie->evtype;
+
 	lastEvent.time = event->time;
 	lastEvent.detail = event->detail;
 	lastEvent.event_x = event->event_x;
 	lastEvent.event_y = event->event_y;
 }
 
+void xf_input_detect_pan(xfContext* xfc)
+{
+	double dx[2];
+	double dy[2];
+
+	double px;
+	double py;
+
+	double dist_x;
+	double dist_y;
+
+	if (active_contacts != 2)
+	{
+		return;
+	}
+
+	dx[0] = contacts[0].pos_x - contacts[0].last_x;
+	dx[1] = contacts[1].pos_x - contacts[1].last_x;
+
+	dy[0] = contacts[0].pos_y - contacts[0].last_y;
+	dy[1] = contacts[1].pos_y - contacts[1].last_y;
+
+	px = fabs(dx[0]) < fabs(dx[1]) ? dx[0] : dx[1];
+	py = fabs(dy[0]) < fabs(dy[1]) ? dy[0] : dy[1];
+
+	px_vector += px;
+	py_vector += py;
+
+	dist_x = fabs(contacts[0].pos_x - contacts[1].pos_x);
+	dist_y = fabs(contacts[0].pos_y - contacts[1].pos_y);
+
+	if (dist_y > MIN_FINGER_DIST)
+	{
+		if (px_vector > PAN_THRESHOLD)
+		{
+			{
+				PanningChangeEventArgs e;
+
+				EventArgsInit(&e, "xfreerdp");
+				e.dx = 5;
+				e.dy = 0;
+				PubSub_OnPanningChange(((rdpContext*) xfc)->pubSub, xfc, &e);
+			}
+
+			px_vector = 0;
+
+			px_vector = 0;
+			py_vector = 0;
+			z_vector = 0;
+		}
+		else if (px_vector < -PAN_THRESHOLD)
+		{
+			{
+				PanningChangeEventArgs e;
+
+				EventArgsInit(&e, "xfreerdp");
+				e.dx = -5;
+				e.dy = 0;
+				PubSub_OnPanningChange(((rdpContext*) xfc)->pubSub, xfc, &e);
+			}
+
+			px_vector = 0;
+
+			px_vector = 0;
+			py_vector = 0;
+			z_vector = 0;
+		}
+
+	}
+
+	if (dist_x > MIN_FINGER_DIST)
+	{
+
+		if (py_vector > PAN_THRESHOLD)
+		{
+			{
+				PanningChangeEventArgs e;
+
+				EventArgsInit(&e, "xfreerdp");
+				e.dx = 0;
+				e.dy = 5;
+				PubSub_OnPanningChange(((rdpContext*) xfc)->pubSub, xfc, &e);
+			}
+
+			py_vector = 0;
+
+			px_vector = 0;
+			py_vector = 0;
+			z_vector = 0;
+		}
+		else if (py_vector < -PAN_THRESHOLD)
+		{
+			{
+				PanningChangeEventArgs e;
+
+				EventArgsInit(&e, "xfreerdp");
+				e.dx = 0;
+				e.dy = -5;
+				PubSub_OnPanningChange(((rdpContext*) xfc)->pubSub, xfc, &e);
+			}
+
+			py_vector = 0;
+
+			px_vector = 0;
+			py_vector = 0;
+			z_vector = 0;
+		}
+	}
+}
+
 void xf_input_detect_pinch(xfContext* xfc)
 {
 	double dist;
 	double zoom;
+
 	double delta;
-	ResizeWindowEventArgs e;
+	ZoomingChangeEventArgs e;
 
 	if (active_contacts != 2)
 	{
@@ -219,7 +367,7 @@ void xf_input_detect_pinch(xfContext* xfc)
 
 	/* first calculate the distance */
 	dist = sqrt(pow(contacts[1].pos_x - contacts[0].last_x, 2.0) +
-			pow(contacts[1].pos_y - contacts[0].last_y, 2.0));
+		    pow(contacts[1].pos_y - contacts[0].last_y, 2.0));
 
 	/* if this is the first 2pt touch */
 	if (firstDist <= 0)
@@ -228,50 +376,48 @@ void xf_input_detect_pinch(xfContext* xfc)
 		lastDist = firstDist;
 		scale_cnt = 0;
 		z_vector = 0;
+
+		px_vector = 0;
+		py_vector = 0;
+		z_vector = 0;
 	}
 	else
 	{
 		delta = lastDist - dist;
 
+		if(delta > 1.0)
+			delta = 1.0;
+		if(delta < -1.0)
+			delta = -1.0;
+
 		/* compare the current distance to the first one */
 		zoom = (dist / firstDist);
 
 		z_vector += delta;
-		//printf("d: %.2f\n", delta);
 
 		lastDist = dist;
 
-		if (z_vector > 10)
+		if (z_vector > ZOOM_THRESHOLD)
 		{
-			xfc->scale -= 0.05;
-
-			if (xfc->scale < 0.5)
-				xfc->scale = 0.5;
-
-			XResizeWindow(xfc->display, xfc->window->handle, xfc->originalWidth * xfc->scale, xfc->originalHeight * xfc->scale);
-
 			EventArgsInit(&e, "xfreerdp");
-			e.width = (int) xfc->originalWidth * xfc->scale;
-			e.height = (int) xfc->originalHeight * xfc->scale;
-			PubSub_OnResizeWindow(((rdpContext*) xfc)->pubSub, xfc, &e);
+			e.dx = e.dy = -10;
+			PubSub_OnZoomingChange(((rdpContext*) xfc)->pubSub, xfc, &e);
 
+			z_vector = 0;
+			px_vector = 0;
+			py_vector = 0;
 			z_vector = 0;
 		}
 
-		if (z_vector < -10)
+		if (z_vector < -ZOOM_THRESHOLD)
 		{
-			xfc->scale += 0.05;
-
-			if (xfc->scale > 1.5)
-				xfc->scale = 1.5;
-
-			XResizeWindow(xfc->display, xfc->window->handle, xfc->originalWidth * xfc->scale, xfc->originalHeight * xfc->scale);
-
 			EventArgsInit(&e, "xfreerdp");
-			e.width = (int) xfc->originalWidth * xfc->scale;
-			e.height = (int) xfc->originalHeight * xfc->scale;
-			PubSub_OnResizeWindow(((rdpContext*) xfc)->pubSub, xfc, &e);
+			e.dx = e.dy = 10;
+			PubSub_OnZoomingChange(((rdpContext*) xfc)->pubSub, xfc, &e);
 
+			z_vector = 0;
+			px_vector = 0;
+			py_vector = 0;
 			z_vector = 0;
 		}
 	}
@@ -311,6 +457,7 @@ void xf_input_touch_update(xfContext* xfc, XIDeviceEvent* event)
 			contacts[i].pos_y = event->event_y;
 
 			xf_input_detect_pinch(xfc);
+			xf_input_detect_pan(xfc);
 
 			break;
 		}
@@ -327,11 +474,9 @@ void xf_input_touch_end(xfContext* xfc, XIDeviceEvent* event)
 		{
 			contacts[i].id = 0;
 			contacts[i].count = 0;
-			//contacts[i].pos_x = (int)event->event_x;
-			//contacts[i].pos_y = (int)event->event_y;
 
 			active_contacts--;
-			break;printf("TouchBegin\n");
+			break;
 		}
 	}
 }
@@ -347,25 +492,25 @@ int xf_input_handle_event_local(xfContext* xfc, XEvent* event)
 		switch (cookie->evtype)
 		{
 			case XI_TouchBegin:
-				if (xf_input_is_duplicate(cookie->data) == FALSE)
+				if (xf_input_is_duplicate(cookie) == FALSE)
 					xf_input_touch_begin(xfc, cookie->data);
-				xf_input_save_last_event(cookie->data);
+				xf_input_save_last_event(cookie);
 				break;
 
 			case XI_TouchUpdate:
-				if (xf_input_is_duplicate(cookie->data) == FALSE)
+				if (xf_input_is_duplicate(cookie) == FALSE)
 					xf_input_touch_update(xfc, cookie->data);
-				xf_input_save_last_event(cookie->data);
+				xf_input_save_last_event(cookie);
 				break;
 
 			case XI_TouchEnd:
-				if (xf_input_is_duplicate(cookie->data) == FALSE)
+				if (xf_input_is_duplicate(cookie) == FALSE)
 					xf_input_touch_end(xfc, cookie->data);
-				xf_input_save_last_event(cookie->data);
+				xf_input_save_last_event(cookie);
 				break;
 
 			default:
-				printf("unhandled xi type= %d\n", cookie->evtype);
+				WLog_ERR(TAG, "unhandled xi type= %d", cookie->evtype);
 				break;
 		}
 	}
@@ -387,6 +532,57 @@ char* xf_input_touch_state_string(DWORD flags)
 		return "TouchUnknown";
 }
 
+void xf_input_hide_cursor(xfContext* xfc)
+{
+#ifdef WITH_XCURSOR
+	if (!xfc->cursorHidden)
+	{
+		XcursorImage ci;
+		XcursorPixel xp = 0;
+		static Cursor nullcursor = None;
+
+		xf_lock_x11(xfc, FALSE);
+
+		ZeroMemory(&ci, sizeof(ci));
+		ci.version = XCURSOR_IMAGE_VERSION;
+		ci.size = sizeof(ci);
+		ci.width = ci.height = 1;
+		ci.xhot = ci.yhot = 0;
+		ci.pixels = &xp;
+		nullcursor = XcursorImageLoadCursor(xfc->display, &ci);
+
+		if ((xfc->window) && (nullcursor != None))
+			XDefineCursor(xfc->display, xfc->window->handle, nullcursor);
+
+		xfc->cursorHidden = TRUE;
+
+		xf_unlock_x11(xfc, FALSE);
+	}
+#endif
+}
+
+void xf_input_show_cursor(xfContext* xfc)
+{
+#ifdef WITH_XCURSOR
+	xf_lock_x11(xfc, FALSE);
+
+	if (xfc->cursorHidden)
+	{
+		if (xfc->window)
+		{
+			if (!xfc->pointer)
+				XUndefineCursor(xfc->display, xfc->window->handle);
+			else
+				XDefineCursor(xfc->display, xfc->window->handle, xfc->pointer->cursor);
+		}
+
+		xfc->cursorHidden = FALSE;
+	}
+
+	xf_unlock_x11(xfc, FALSE);
+#endif
+}
+
 int xf_input_touch_remote(xfContext* xfc, XIDeviceEvent* event, int evtype)
 {
 	int x, y;
@@ -397,24 +593,28 @@ int xf_input_touch_remote(xfContext* xfc, XIDeviceEvent* event, int evtype)
 	if (!rdpei)
 		return 0;
 
+	xf_input_hide_cursor(xfc);
+
 	touchId = event->detail;
 	x = (int) event->event_x;
 	y = (int) event->event_y;
 
+	xf_event_adjust_coordinates(xfc, &x, &y);
+
 	if (evtype == XI_TouchBegin)
 	{
-		//printf("TouchBegin: %d\n", touchId);
-		contactId = rdpei->TouchBegin(rdpei, touchId, x, y);
+		WLog_DBG(TAG, "TouchBegin: %d", touchId);
+		rdpei->TouchBegin(rdpei, touchId, x, y, &contactId);
 	}
 	else if (evtype == XI_TouchUpdate)
 	{
-		//printf("TouchUpdate: %d\n", touchId);
-		contactId = rdpei->TouchUpdate(rdpei, touchId, x, y);
+		WLog_DBG(TAG, "TouchUpdate: %d", touchId);
+		rdpei->TouchUpdate(rdpei, touchId, x, y, &contactId);
 	}
 	else if (evtype == XI_TouchEnd)
 	{
-		//printf("TouchEnd: %d\n", touchId);
-		contactId = rdpei->TouchEnd(rdpei, touchId, x, y);
+		WLog_DBG(TAG, "TouchEnd: %d", touchId);
+		rdpei->TouchEnd(rdpei, touchId, x, y, &contactId);
 	}
 
 	return 0;
@@ -422,25 +622,26 @@ int xf_input_touch_remote(xfContext* xfc, XIDeviceEvent* event, int evtype)
 
 int xf_input_event(xfContext* xfc, XIDeviceEvent* event, int evtype)
 {
+	xf_input_show_cursor(xfc);
 
 	switch (evtype)
 	{
 		case XI_ButtonPress:
-			//printf("ButtonPress\n");
+
 			xf_generic_ButtonPress(xfc, (int) event->event_x, (int) event->event_y,
-					event->detail, event->event, xfc->remote_app);
+					       event->detail, event->event, xfc->remote_app);
 			break;
 
 		case XI_ButtonRelease:
-			//printf("ButtonRelease\n");
+
 			xf_generic_ButtonRelease(xfc, (int) event->event_x, (int) event->event_y,
-					event->detail, event->event, xfc->remote_app);
+						 event->detail, event->event, xfc->remote_app);
 			break;
 
 		case XI_Motion:
-			//printf("Motion\n");
+
 			xf_generic_MotionNotify(xfc, (int) event->event_x, (int) event->event_y,
-					event->detail, event->event, xfc->remote_app);
+						event->detail, event->event, xfc->remote_app);
 			break;
 	}
 
@@ -489,31 +690,18 @@ int xf_input_init(xfContext* xfc, Window window)
 
 #endif
 
-void xf_process_rdpei_event(xfContext* xfc, wMessage* event)
-{
-	switch (GetMessageType(event->id))
-	{
-		case RdpeiChannel_ServerReady:
-			break;
-
-		case RdpeiChannel_SuspendTouch:
-			break;
-
-		case RdpeiChannel_ResumeTouch:
-			break;
-	}
-}
-
 int xf_input_handle_event(xfContext* xfc, XEvent* event)
 {
 #ifdef WITH_XI
-	if (xfc->settings->MultiTouchInput)
+  	if (xfc->settings->MultiTouchInput)
 	{
 		return xf_input_handle_event_remote(xfc, event);
 	}
 
-	if (xfc->enableScaling)
+	if (xfc->settings->MultiTouchGestures)
+	{
 		return xf_input_handle_event_local(xfc, event);
+	}
 #endif
 
 	return 0;

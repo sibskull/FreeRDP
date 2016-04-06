@@ -22,18 +22,22 @@
 #endif
 
 #include <stdio.h>
-
 #include <winpr/crt.h>
 
+#include <freerdp/log.h>
 #include <freerdp/update.h>
 #include <freerdp/freerdp.h>
 #include <winpr/stream.h>
 
+
 #include <freerdp/cache/brush.h>
 
-void update_gdi_patblt(rdpContext* context, PATBLT_ORDER* patblt)
+#define TAG FREERDP_TAG("cache.brush")
+
+BOOL update_gdi_patblt(rdpContext* context, PATBLT_ORDER* patblt)
 {
 	BYTE style;
+	BOOL ret = TRUE;
 	rdpBrush* brush = &patblt->brush;
 	rdpCache* cache = context->cache;
 
@@ -45,21 +49,23 @@ void update_gdi_patblt(rdpContext* context, PATBLT_ORDER* patblt)
 		brush->style = 0x03;
 	}
 
-	IFCALL(cache->brush->PatBlt, context, patblt);
+	IFCALLRET(cache->brush->PatBlt, ret, context, patblt);
 	brush->style = style;
+	return ret;
 }
 
-void update_gdi_polygon_sc(rdpContext* context, POLYGON_SC_ORDER* polygon_sc)
+BOOL update_gdi_polygon_sc(rdpContext* context, POLYGON_SC_ORDER* polygon_sc)
 {
 	rdpCache* cache = context->cache;
-	IFCALL(cache->brush->PolygonSC, context, polygon_sc);
+	return IFCALLRESULT(TRUE, cache->brush->PolygonSC, context, polygon_sc);
 }
 
-void update_gdi_polygon_cb(rdpContext* context, POLYGON_CB_ORDER* polygon_cb)
+BOOL update_gdi_polygon_cb(rdpContext* context, POLYGON_CB_ORDER* polygon_cb)
 {
 	BYTE style;
 	rdpBrush* brush = &polygon_cb->brush;
 	rdpCache* cache = context->cache;
+	BOOL ret = TRUE;
 
 	style = brush->style;
 
@@ -69,95 +75,99 @@ void update_gdi_polygon_cb(rdpContext* context, POLYGON_CB_ORDER* polygon_cb)
 		brush->style = 0x03;
 	}
 
-	IFCALL(cache->brush->PolygonCB, context, polygon_cb);
+	IFCALLRET(cache->brush->PolygonCB, ret, context, polygon_cb);
 	brush->style = style;
+	return ret;
 }
 
-void update_gdi_cache_brush(rdpContext* context, CACHE_BRUSH_ORDER* cache_brush)
+static BOOL update_gdi_cache_brush(rdpContext* context, CACHE_BRUSH_ORDER* cacheBrush)
 {
 	int length;
 	void* data = NULL;
 	rdpCache* cache = context->cache;
 
-	length = cache_brush->bpp * 64 / 8;
+	length = cacheBrush->bpp * 64 / 8;
 
 	data = malloc(length);
-	CopyMemory(data, cache_brush->data, length);
+	if (!data)
+		return FALSE;
+	CopyMemory(data, cacheBrush->data, length);
 
-	brush_cache_put(cache->brush, cache_brush->index, data, cache_brush->bpp);
+	brush_cache_put(cache->brush, cacheBrush->index, data, cacheBrush->bpp);
+	return TRUE;
 }
 
-void* brush_cache_get(rdpBrushCache* brush, UINT32 index, UINT32* bpp)
+void* brush_cache_get(rdpBrushCache* brushCache, UINT32 index, UINT32* bpp)
 {
 	void* entry;
 
+	if (!brushCache)
+		return NULL;
+
+	if (!bpp)
+		return NULL;
+
 	if (*bpp == 1)
 	{
-		if (index >= brush->maxMonoEntries)
+		if (index >= brushCache->maxMonoEntries)
 		{
-			fprintf(stderr, "invalid brush (%d bpp) index: 0x%04X\n", *bpp, index);
+			WLog_ERR(TAG,  "invalid brush (%d bpp) index: 0x%04X", *bpp, index);
 			return NULL;
 		}
 
-		*bpp = brush->monoEntries[index].bpp;
-		entry = brush->monoEntries[index].entry;
+		*bpp = brushCache->monoEntries[index].bpp;
+		entry = brushCache->monoEntries[index].entry;
 	}
 	else
 	{
-		if (index >= brush->maxEntries)
+		if (index >= brushCache->maxEntries)
 		{
-			fprintf(stderr, "invalid brush (%d bpp) index: 0x%04X\n", *bpp, index);
+			WLog_ERR(TAG,  "invalid brush (%d bpp) index: 0x%04X", *bpp, index);
 			return NULL;
 		}
 
-		*bpp = brush->entries[index].bpp;
-		entry = brush->entries[index].entry;
+		*bpp = brushCache->entries[index].bpp;
+		entry = brushCache->entries[index].entry;
 	}
 
 	if (entry == NULL)
 	{
-		fprintf(stderr, "invalid brush (%d bpp) at index: 0x%04X\n", *bpp, index);
+		WLog_ERR(TAG,  "invalid brush (%d bpp) at index: 0x%04X", *bpp, index);
 		return NULL;
 	}
 
 	return entry;
 }
 
-void brush_cache_put(rdpBrushCache* brush, UINT32 index, void* entry, UINT32 bpp)
+void brush_cache_put(rdpBrushCache* brushCache, UINT32 index, void* entry, UINT32 bpp)
 {
-	void* prevEntry;
-
 	if (bpp == 1)
 	{
-		if (index >= brush->maxMonoEntries)
+		if (index >= brushCache->maxMonoEntries)
 		{
-			fprintf(stderr, "invalid brush (%d bpp) index: 0x%04X\n", bpp, index);
+			WLog_ERR(TAG,  "invalid brush (%d bpp) index: 0x%04X", bpp, index);
+			free(entry);
 			return;
 		}
 
-		prevEntry = brush->monoEntries[index].entry;
+		free(brushCache->monoEntries[index].entry);
 
-		if (prevEntry != NULL)
-			free(prevEntry);
-
-		brush->monoEntries[index].bpp = bpp;
-		brush->monoEntries[index].entry = entry;
+		brushCache->monoEntries[index].bpp = bpp;
+		brushCache->monoEntries[index].entry = entry;
 	}
 	else
 	{
-		if (index >= brush->maxEntries)
+		if (index >= brushCache->maxEntries)
 		{
-			fprintf(stderr, "invalid brush (%d bpp) index: 0x%04X\n", bpp, index);
+			WLog_ERR(TAG,  "invalid brush (%d bpp) index: 0x%04X", bpp, index);
+			free(entry);
 			return;
 		}
 
-		prevEntry = brush->entries[index].entry;
+		free(brushCache->entries[index].entry);
 
-		if (prevEntry != NULL)
-			free(prevEntry);
-
-		brush->entries[index].bpp = bpp;
-		brush->entries[index].entry = entry;
+		brushCache->entries[index].bpp = bpp;
+		brushCache->entries[index].entry = entry;
 	}
 }
 
@@ -177,56 +187,57 @@ void brush_cache_register_callbacks(rdpUpdate* update)
 
 rdpBrushCache* brush_cache_new(rdpSettings* settings)
 {
-	rdpBrushCache* brush;
+	rdpBrushCache* brushCache;
 
-	brush = (rdpBrushCache*) malloc(sizeof(rdpBrushCache));
-	ZeroMemory(brush, sizeof(rdpBrushCache));
+	brushCache = (rdpBrushCache*) calloc(1, sizeof(rdpBrushCache));
 
-	if (brush != NULL)
-	{
-		brush->settings = settings;
+	if (!brushCache)
+		return NULL;
 
-		brush->maxEntries = 64;
-		brush->maxMonoEntries = 64;
+	brushCache->settings = settings;
 
-		brush->entries = (BRUSH_ENTRY*) malloc(sizeof(BRUSH_ENTRY) * brush->maxEntries);
-		ZeroMemory(brush->entries, sizeof(BRUSH_ENTRY) * brush->maxEntries);
+	brushCache->maxEntries = 64;
+	brushCache->maxMonoEntries = 64;
 
-		brush->monoEntries = (BRUSH_ENTRY*) malloc(sizeof(BRUSH_ENTRY) * brush->maxMonoEntries);
-		ZeroMemory(brush->monoEntries, sizeof(BRUSH_ENTRY) * brush->maxMonoEntries);
-	}
+	brushCache->entries = (BRUSH_ENTRY*)calloc(brushCache->maxEntries, sizeof(BRUSH_ENTRY));
+	if (!brushCache->entries)
+		goto error_entries;
 
-	return brush;
+	brushCache->monoEntries = (BRUSH_ENTRY*) calloc(brushCache->maxMonoEntries, sizeof(BRUSH_ENTRY));
+	if (!brushCache->monoEntries)
+		goto error_mono;
+
+	return brushCache;
+
+error_mono:
+	free(brushCache->entries);
+error_entries:
+	free(brushCache);
+	return NULL;
 }
 
-void brush_cache_free(rdpBrushCache* brush)
+void brush_cache_free(rdpBrushCache* brushCache)
 {
 	int i;
 
-	if (brush != NULL)
+	if (brushCache)
 	{
-		if (brush->entries != NULL)
+		if (brushCache->entries)
 		{
-			for (i = 0; i < (int) brush->maxEntries; i++)
-			{
-				if (brush->entries[i].entry != NULL)
-					free(brush->entries[i].entry);
-			}
+			for (i = 0; i < (int) brushCache->maxEntries; i++)
+				free(brushCache->entries[i].entry);
 
-			free(brush->entries);
+			free(brushCache->entries);
 		}
 
-		if (brush->monoEntries != NULL)
+		if (brushCache->monoEntries)
 		{
-			for (i = 0; i < (int) brush->maxMonoEntries; i++)
-			{
-				if (brush->monoEntries[i].entry != NULL)
-					free(brush->monoEntries[i].entry);
-			}
+			for (i = 0; i < (int) brushCache->maxMonoEntries; i++)
+				free(brushCache->monoEntries[i].entry);
 
-			free(brush->monoEntries);
+			free(brushCache->monoEntries);
 		}
 
-		free(brush);
+		free(brushCache);
 	}
 }

@@ -4,6 +4,8 @@
  *
  * Copyright 2010-2011 Vic Lee
  * Copyright 2010-2012 Marc-Andre Moreau <marcandre.moreau@gmail.com>
+ * Copyright 2015 Thincast Technologies GmbH
+ * Copyright 2015 DI (FH) Martin Haimberger <martin.haimberger@thincast.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,14 +38,14 @@
 #include <string.h>
 
 #include <winpr/crt.h>
+#include <winpr/string.h>
 #include <winpr/synch.h>
 #include <winpr/thread.h>
-#include <winpr/interlocked.h>
-
-#include <freerdp/utils/list.h>
 #include <winpr/stream.h>
+#include <winpr/interlocked.h>
+#include <winpr/collections.h>
+
 #include <freerdp/channels/rdpdr.h>
-#include <freerdp/utils/svc_plugin.h>
 
 #include "drive_file.h"
 
@@ -54,14 +56,14 @@ struct _DRIVE_DEVICE
 	DEVICE device;
 
 	char* path;
-	LIST* files;
+	wListDictionary* files;
 
 	HANDLE thread;
-	HANDLE irpEvent;
-	HANDLE stopEvent;
-	PSLIST_HEADER pIrpList;
+	wMessageQueue* IrpQueue;
 
 	DEVMAN* devman;
+
+	rdpContext* rdpcontext;
 };
 
 static UINT32 drive_map_posix_err(int fs_errno)
@@ -94,31 +96,28 @@ static UINT32 drive_map_posix_err(int fs_errno)
 			break;
 	}
 
-	DEBUG_SVC("errno 0x%x mapped to 0x%x", fs_errno, rc);
-
 	return rc;
 }
 
-static DRIVE_FILE* drive_get_file_by_id(DRIVE_DEVICE* disk, UINT32 id)
+static DRIVE_FILE* drive_get_file_by_id(DRIVE_DEVICE* drive, UINT32 id)
 {
-	LIST_ITEM* item;
-	DRIVE_FILE* file;
+	DRIVE_FILE* file = NULL;
+	void* key = (void*) (size_t) id;
 
-	for (item = disk->files->head; item; item = item->next)
-	{
-		file = (DRIVE_FILE*) item->data;
+	file = (DRIVE_FILE*) ListDictionary_GetItemValue(drive->files, key);
 
-		if (file->id == id)
-			return file;
-	}
-
-	return NULL;
+	return file;
 }
 
-static void drive_process_irp_create(DRIVE_DEVICE* disk, IRP* irp)
+/**
+ * Function description
+ *
+ * @return 0 on success, otherwise a Win32 error code
+ */
+static UINT drive_process_irp_create(DRIVE_DEVICE* drive, IRP* irp)
 {
-	char* path;
 	int status;
+	void* key;
 	UINT32 FileId;
 	DRIVE_FILE* file;
 	BYTE Information;
@@ -126,6 +125,7 @@ static void drive_process_irp_create(DRIVE_DEVICE* disk, IRP* irp)
 	UINT32 CreateDisposition;
 	UINT32 CreateOptions;
 	UINT32 PathLength;
+	char* path = NULL;
 
 	Stream_Read_UINT32(irp->input, DesiredAccess);
 	Stream_Seek(irp->input, 16); /* AllocationSize(8), FileAttributes(4), SharedAccess(4) */
@@ -137,20 +137,26 @@ static void drive_process_irp_create(DRIVE_DEVICE* disk, IRP* irp)
 			PathLength / 2, &path, 0, NULL, NULL);
 
 	if (status < 1)
+	{
 		path = (char*) calloc(1, 1);
+		if (!path)
+		{
+			WLog_ERR(TAG, "calloc failed!");
+			return CHANNEL_RC_NO_MEMORY;
+		}
+	}
+
 
 	FileId = irp->devman->id_sequence++;
 
-	file = drive_file_new(disk->path, path, FileId,
+	file = drive_file_new(drive->path, path, FileId,
 		DesiredAccess, CreateDisposition, CreateOptions);
 
-	if (file == NULL)
+	if (!file)
 	{
 		irp->IoStatus = STATUS_UNSUCCESSFUL;
 		FileId = 0;
 		Information = 0;
-
-		DEBUG_WARN("failed to create %s.", path);
 	}
 	else if (file->err)
 	{
@@ -159,12 +165,17 @@ static void drive_process_irp_create(DRIVE_DEVICE* disk, IRP* irp)
 
 		/* map errno to windows result */
 		irp->IoStatus = drive_map_posix_err(file->err);
-		/* Already in the error path, no need to check return value here. */
-		(void) drive_file_free(file, TRUE);
+		drive_file_free(file);
 	}
 	else
 	{
-		list_enqueue(disk->files, file);
+		key = (void*) (size_t) file->id;
+		if (!ListDictionary_Add(drive->files, key, file))
+		{
+			WLog_ERR(TAG, "ListDictionary_Add failed!");
+			free(path);
+			return ERROR_INTERNAL_ERROR;
+		}
 
 		switch (CreateDisposition)
 		{
@@ -184,7 +195,6 @@ static void drive_process_irp_create(DRIVE_DEVICE* disk, IRP* irp)
 				Information = 0;
 				break;
 		}
-		DEBUG_SVC("%s(%d) created.", file->fullpath, file->id);
 	}
 
 	Stream_Write_UINT32(irp->output, FileId);
@@ -192,37 +202,44 @@ static void drive_process_irp_create(DRIVE_DEVICE* disk, IRP* irp)
 
 	free(path);
 
-	irp->Complete(irp);
+	return irp->Complete(irp);
 }
 
-static void drive_process_irp_close(DRIVE_DEVICE* disk, IRP* irp)
+/**
+ * Function description
+ *
+ * @return 0 on success, otherwise a Win32 error code
+ */
+static UINT drive_process_irp_close(DRIVE_DEVICE* drive, IRP* irp)
 {
+	void* key;
 	DRIVE_FILE* file;
 
-	file = drive_get_file_by_id(disk, irp->FileId);
+	file = drive_get_file_by_id(drive, irp->FileId);
 
-	if (file == NULL)
+	key = (void*) (size_t) irp->FileId;
+
+	if (!file)
 	{
 		irp->IoStatus = STATUS_UNSUCCESSFUL;
-
-		DEBUG_WARN("FileId %d not valid.", irp->FileId);
 	}
 	else
 	{
-		int err;
-		DEBUG_SVC("%s(%d) closed.", file->fullpath, file->id);
-
-		list_remove(disk->files, file);
-		if ((err = drive_file_free(file, FALSE)) != 0)
-			irp->IoStatus = drive_map_posix_err(err);
+		ListDictionary_Remove(drive->files, key);
+		drive_file_free(file);
 	}
 
 	Stream_Zero(irp->output, 5); /* Padding(5) */
 
-	irp->Complete(irp);
+	return irp->Complete(irp);
 }
 
-static void drive_process_irp_read(DRIVE_DEVICE* disk, IRP* irp)
+/**
+ * Function description
+ *
+ * @return 0 on success, otherwise a Win32 error code
+ */
+static UINT drive_process_irp_read(DRIVE_DEVICE* drive, IRP* irp)
 {
 	DRIVE_FILE* file;
 	UINT32 Length;
@@ -232,37 +249,33 @@ static void drive_process_irp_read(DRIVE_DEVICE* disk, IRP* irp)
 	Stream_Read_UINT32(irp->input, Length);
 	Stream_Read_UINT64(irp->input, Offset);
 
-	file = drive_get_file_by_id(disk, irp->FileId);
+	file = drive_get_file_by_id(drive, irp->FileId);
 
-	if (file == NULL)
+	if (!file)
 	{
 		irp->IoStatus = STATUS_UNSUCCESSFUL;
 		Length = 0;
-
-		DEBUG_WARN("FileId %d not valid.", irp->FileId);
 	}
 	else if (!drive_file_seek(file, Offset))
 	{
 		irp->IoStatus = STATUS_UNSUCCESSFUL;
 		Length = 0;
-
-		DEBUG_WARN("seek %s(%d) failed.", file->fullpath, file->id);
 	}
 	else
 	{
 		buffer = (BYTE*) malloc(Length);
+		if (!buffer)
+		{
+			WLog_ERR(TAG, "malloc failed!");
+			return CHANNEL_RC_OK;
+		}
+
 		if (!drive_file_read(file, buffer, &Length))
 		{
 			irp->IoStatus = STATUS_UNSUCCESSFUL;
 			free(buffer);
 			buffer = NULL;
 			Length = 0;
-
-			DEBUG_WARN("read %s(%d) failed.", file->fullpath, file->id);
-		}
-		else
-		{
-			DEBUG_SVC("read %llu-%llu from %s(%d).", Offset, Offset + Length, file->fullpath, file->id);
 		}
 	}
 
@@ -270,16 +283,25 @@ static void drive_process_irp_read(DRIVE_DEVICE* disk, IRP* irp)
 
 	if (Length > 0)
 	{
-		Stream_EnsureRemainingCapacity(irp->output, (int) Length);
+		if (!Stream_EnsureRemainingCapacity(irp->output, (int) Length))
+		{
+			WLog_ERR(TAG, "Stream_EnsureRemainingCapacity failed!");
+			return ERROR_INTERNAL_ERROR;
+		}
 		Stream_Write(irp->output, buffer, Length);
 	}
 
 	free(buffer);
 
-	irp->Complete(irp);
+	return irp->Complete(irp);
 }
 
-static void drive_process_irp_write(DRIVE_DEVICE* disk, IRP* irp)
+/**
+ * Function description
+ *
+ * @return 0 on success, otherwise a Win32 error code
+ */
+static UINT drive_process_irp_write(DRIVE_DEVICE* drive, IRP* irp)
 {
 	DRIVE_FILE* file;
 	UINT32 Length;
@@ -289,70 +311,62 @@ static void drive_process_irp_write(DRIVE_DEVICE* disk, IRP* irp)
 	Stream_Read_UINT64(irp->input, Offset);
 	Stream_Seek(irp->input, 20); /* Padding */
 
-	file = drive_get_file_by_id(disk, irp->FileId);
+	file = drive_get_file_by_id(drive, irp->FileId);
 
-	if (file == NULL)
+	if (!file)
 	{
 		irp->IoStatus = STATUS_UNSUCCESSFUL;
 		Length = 0;
-
-		DEBUG_WARN("FileId %d not valid.", irp->FileId);
 	}
 	else if (!drive_file_seek(file, Offset))
 	{
 		irp->IoStatus = STATUS_UNSUCCESSFUL;
 		Length = 0;
-
-		DEBUG_WARN("seek %s(%d) failed.", file->fullpath, file->id);
 	}
 	else if (!drive_file_write(file, Stream_Pointer(irp->input), Length))
 	{
 		irp->IoStatus = STATUS_UNSUCCESSFUL;
 		Length = 0;
-
-		DEBUG_WARN("write %s(%d) failed.", file->fullpath, file->id);
-	}
-	else
-	{
-		DEBUG_SVC("write %llu-%llu to %s(%d).", Offset, Offset + Length, file->fullpath, file->id);
 	}
 
 	Stream_Write_UINT32(irp->output, Length);
 	Stream_Write_UINT8(irp->output, 0); /* Padding */
 
-	irp->Complete(irp);
+	return irp->Complete(irp);
 }
 
-static void drive_process_irp_query_information(DRIVE_DEVICE* disk, IRP* irp)
+/**
+ * Function description
+ *
+ * @return 0 on success, otherwise a Win32 error code
+ */
+static UINT drive_process_irp_query_information(DRIVE_DEVICE* drive, IRP* irp)
 {
 	DRIVE_FILE* file;
 	UINT32 FsInformationClass;
 
 	Stream_Read_UINT32(irp->input, FsInformationClass);
 
-	file = drive_get_file_by_id(disk, irp->FileId);
+	file = drive_get_file_by_id(drive, irp->FileId);
 
-	if (file == NULL)
+	if (!file)
 	{
 		irp->IoStatus = STATUS_UNSUCCESSFUL;
-
-		DEBUG_WARN("FileId %d not valid.", irp->FileId);
 	}
 	else if (!drive_file_query_information(file, FsInformationClass, irp->output))
 	{
 		irp->IoStatus = STATUS_UNSUCCESSFUL;
-
-		DEBUG_WARN("FsInformationClass %d on %s(%d) failed.", FsInformationClass, file->fullpath, file->id);
-	}
-	else
-	{
-		DEBUG_SVC("FsInformationClass %d on %s(%d).", FsInformationClass, file->fullpath, file->id);
 	}
 
-	irp->Complete(irp);
+	return irp->Complete(irp);
 }
 
-static void drive_process_irp_set_information(DRIVE_DEVICE* disk, IRP* irp)
+/**
+ * Function description
+ *
+ * @return 0 on success, otherwise a Win32 error code
+ */
+static UINT drive_process_irp_set_information(DRIVE_DEVICE* drive, IRP* irp)
 {
 	DRIVE_FILE* file;
 	UINT32 FsInformationClass;
@@ -362,31 +376,31 @@ static void drive_process_irp_set_information(DRIVE_DEVICE* disk, IRP* irp)
 	Stream_Read_UINT32(irp->input, Length);
 	Stream_Seek(irp->input, 24); /* Padding */
 
-	file = drive_get_file_by_id(disk, irp->FileId);
+	file = drive_get_file_by_id(drive, irp->FileId);
 
-	if (file == NULL)
+	if (!file)
 	{
 		irp->IoStatus = STATUS_UNSUCCESSFUL;
-
-		DEBUG_WARN("FileId %d not valid.", irp->FileId);
 	}
 	else if (!drive_file_set_information(file, FsInformationClass, Length, irp->input))
 	{
 		irp->IoStatus = STATUS_UNSUCCESSFUL;
+	}
 
-		DEBUG_WARN("FsInformationClass %d on %s(%d) failed.", FsInformationClass, file->fullpath, file->id);
-	}
-	else
-	{
-		DEBUG_SVC("FsInformationClass %d on %s(%d) ok.", FsInformationClass, file->fullpath, file->id);
-	}
+	if (file && file->is_dir && !dir_empty(file->fullpath))
+		irp->IoStatus = STATUS_DIRECTORY_NOT_EMPTY;
 
 	Stream_Write_UINT32(irp->output, Length);
 
-	irp->Complete(irp);
+	return irp->Complete(irp);
 }
 
-static void drive_process_irp_query_volume_information(DRIVE_DEVICE* disk, IRP* irp)
+/**
+ * Function description
+ *
+ * @return 0 on success, otherwise a Win32 error code
+ */
+static UINT drive_process_irp_query_volume_information(DRIVE_DEVICE* drive, IRP* irp)
 {
 	UINT32 FsInformationClass;
 	wStream* output = irp->output;
@@ -399,16 +413,22 @@ static void drive_process_irp_query_volume_information(DRIVE_DEVICE* disk, IRP* 
 
 	Stream_Read_UINT32(irp->input, FsInformationClass);
 
-	STATVFS(disk->path, &svfst);
-	STAT(disk->path, &st);
+	STATVFS(drive->path, &svfst);
+	STAT(drive->path, &st);
 
 	switch (FsInformationClass)
 	{
 		case FileFsVolumeInformation:
 			/* http://msdn.microsoft.com/en-us/library/cc232108.aspx */
-			length = ConvertToUnicode(CP_UTF8, 0, volumeLabel, -1, &outStr, 0) * 2;
+			length = ConvertToUnicode(sys_code_page, 0, volumeLabel, -1, &outStr, 0) * 2;
 			Stream_Write_UINT32(output, 17 + length); /* Length */
-			Stream_EnsureRemainingCapacity(output, 17 + length);
+			if (!Stream_EnsureRemainingCapacity(output, 17 + length))
+			{
+				WLog_ERR(TAG, "Stream_EnsureRemainingCapacity failed!");
+				free(outStr);
+				return CHANNEL_RC_NO_MEMORY;
+			}
+
 			Stream_Write_UINT64(output, FILE_TIME_SYSTEM_TO_RDP(st.st_ctime)); /* VolumeCreationTime */
 #ifdef ANDROID
 			Stream_Write_UINT32(output, svfst.f_fsid.__val[0]); /* VolumeSerialNumber */
@@ -425,7 +445,11 @@ static void drive_process_irp_query_volume_information(DRIVE_DEVICE* disk, IRP* 
 		case FileFsSizeInformation:
 			/* http://msdn.microsoft.com/en-us/library/cc232107.aspx */
 			Stream_Write_UINT32(output, 24); /* Length */
-			Stream_EnsureRemainingCapacity(output, 24);
+			if (!Stream_EnsureRemainingCapacity(output, 24))
+			{
+				WLog_ERR(TAG, "Stream_EnsureRemainingCapacity failed!");
+				return CHANNEL_RC_NO_MEMORY;
+			}
 			Stream_Write_UINT64(output, svfst.f_blocks); /* TotalAllocationUnits */
 			Stream_Write_UINT64(output, svfst.f_bavail); /* AvailableAllocationUnits */
 			Stream_Write_UINT32(output, 1); /* SectorsPerAllocationUnit */
@@ -434,9 +458,13 @@ static void drive_process_irp_query_volume_information(DRIVE_DEVICE* disk, IRP* 
 
 		case FileFsAttributeInformation:
 			/* http://msdn.microsoft.com/en-us/library/cc232101.aspx */
-			length = ConvertToUnicode(CP_UTF8, 0, diskType, -1, &outStr, 0) * 2;
+			length = ConvertToUnicode(sys_code_page, 0, diskType, -1, &outStr, 0) * 2;
 			Stream_Write_UINT32(output, 12 + length); /* Length */
-			Stream_EnsureRemainingCapacity(output, 12 + length);
+			if (!Stream_EnsureRemainingCapacity(output, 12 + length))
+			{
+				WLog_ERR(TAG, "Stream_EnsureRemainingCapacity failed!");
+				return CHANNEL_RC_NO_MEMORY;
+			}
 			Stream_Write_UINT32(output,
 				FILE_CASE_SENSITIVE_SEARCH |
 				FILE_CASE_PRESERVED_NAMES |
@@ -454,7 +482,11 @@ static void drive_process_irp_query_volume_information(DRIVE_DEVICE* disk, IRP* 
 		case FileFsFullSizeInformation:
 			/* http://msdn.microsoft.com/en-us/library/cc232104.aspx */
 			Stream_Write_UINT32(output, 32); /* Length */
-			Stream_EnsureRemainingCapacity(output, 32);
+			if (!Stream_EnsureRemainingCapacity(output, 32))
+			{
+				WLog_ERR(TAG, "Stream_EnsureRemainingCapacity failed!");
+				return CHANNEL_RC_NO_MEMORY;
+			}
 			Stream_Write_UINT64(output, svfst.f_blocks); /* TotalAllocationUnits */
 			Stream_Write_UINT64(output, svfst.f_bavail); /* CallerAvailableAllocationUnits */
 			Stream_Write_UINT64(output, svfst.f_bfree); /* AvailableAllocationUnits */
@@ -465,7 +497,11 @@ static void drive_process_irp_query_volume_information(DRIVE_DEVICE* disk, IRP* 
 		case FileFsDeviceInformation:
 			/* http://msdn.microsoft.com/en-us/library/cc232109.aspx */
 			Stream_Write_UINT32(output, 8); /* Length */
-			Stream_EnsureRemainingCapacity(output, 8);
+			if (!Stream_EnsureRemainingCapacity(output, 8))
+			{
+				WLog_ERR(TAG, "Stream_EnsureRemainingCapacity failed!");
+				return CHANNEL_RC_NO_MEMORY;
+			}
 			Stream_Write_UINT32(output, FILE_DEVICE_DISK); /* DeviceType */
 			Stream_Write_UINT32(output, 0); /* Characteristics */
 			break;
@@ -473,29 +509,37 @@ static void drive_process_irp_query_volume_information(DRIVE_DEVICE* disk, IRP* 
 		default:
 			irp->IoStatus = STATUS_UNSUCCESSFUL;
 			Stream_Write_UINT32(output, 0); /* Length */
-			DEBUG_WARN("invalid FsInformationClass %d", FsInformationClass);
 			break;
 	}
 
-	irp->Complete(irp);
+	return irp->Complete(irp);
 }
 
 /* http://msdn.microsoft.com/en-us/library/cc241518.aspx */
 
-static void drive_process_irp_silent_ignore(DRIVE_DEVICE* disk, IRP* irp)
+/**
+ * Function description
+ *
+ * @return 0 on success, otherwise a Win32 error code
+ */
+static UINT drive_process_irp_silent_ignore(DRIVE_DEVICE* drive, IRP* irp)
 {
 	UINT32 FsInformationClass;
 	wStream* output = irp->output;
 
 	Stream_Read_UINT32(irp->input, FsInformationClass);
 
-	DEBUG_SVC("FsInformationClass %d in drive_process_irp_silent_ignore", FsInformationClass);
 	Stream_Write_UINT32(output, 0); /* Length */
 
-	irp->Complete(irp);
+	return irp->Complete(irp);
 }
 
-static void drive_process_irp_query_directory(DRIVE_DEVICE* disk, IRP* irp)
+/**
+ * Function description
+ *
+ * @return 0 on success, otherwise a Win32 error code
+ */
+static UINT drive_process_irp_query_directory(DRIVE_DEVICE* drive, IRP* irp)
 {
 	char* path = NULL;
 	int status;
@@ -513,15 +557,18 @@ static void drive_process_irp_query_directory(DRIVE_DEVICE* disk, IRP* irp)
 			PathLength / 2, &path, 0, NULL, NULL);
 
 	if (status < 1)
-		path = (char*) calloc(1, 1);
+		if (!(path = (char*) calloc(1, 1)))
+		{
+			WLog_ERR(TAG, "calloc failed!");
+			return CHANNEL_RC_NO_MEMORY;
+		}
 
-	file = drive_get_file_by_id(disk, irp->FileId);
+	file = drive_get_file_by_id(drive, irp->FileId);
 
 	if (file == NULL)
 	{
 		irp->IoStatus = STATUS_UNSUCCESSFUL;
 		Stream_Write_UINT32(irp->output, 0); /* Length */
-		DEBUG_WARN("FileId %d not valid.", irp->FileId);
 	}
 	else if (!drive_file_query_directory(file, FsInformationClass, InitialQuery, path, irp->output))
 	{
@@ -530,164 +577,203 @@ static void drive_process_irp_query_directory(DRIVE_DEVICE* disk, IRP* irp)
 
 	free(path);
 
-	irp->Complete(irp);
+	return irp->Complete(irp);
 }
 
-static void drive_process_irp_directory_control(DRIVE_DEVICE* disk, IRP* irp)
+/**
+ * Function description
+ *
+ * @return 0 on success, otherwise a Win32 error code
+ */
+static UINT drive_process_irp_directory_control(DRIVE_DEVICE* drive, IRP* irp)
 {
 	switch (irp->MinorFunction)
 	{
 		case IRP_MN_QUERY_DIRECTORY:
-			drive_process_irp_query_directory(disk, irp);
+			return drive_process_irp_query_directory(drive, irp);
 			break;
 
 		case IRP_MN_NOTIFY_CHANGE_DIRECTORY: /* TODO */
-			irp->Discard(irp);
+			return irp->Discard(irp);
 			break;
 
 		default:
-			DEBUG_WARN("MinorFunction 0x%X not supported", irp->MinorFunction);
 			irp->IoStatus = STATUS_NOT_SUPPORTED;
 			Stream_Write_UINT32(irp->output, 0); /* Length */
-			irp->Complete(irp);
+			return irp->Complete(irp);
 			break;
 	}
+	return CHANNEL_RC_OK;
 }
 
-static void drive_process_irp_device_control(DRIVE_DEVICE* disk, IRP* irp)
+/**
+ * Function description
+ *
+ * @return 0 on success, otherwise a Win32 error code
+ */
+static UINT drive_process_irp_device_control(DRIVE_DEVICE* drive, IRP* irp)
 {
 	Stream_Write_UINT32(irp->output, 0); /* OutputBufferLength */
-	irp->Complete(irp);
+	return irp->Complete(irp);
 }
 
-static void drive_process_irp(DRIVE_DEVICE* disk, IRP* irp)
+/**
+ * Function description
+ *
+ * @return 0 on success, otherwise a Win32 error code
+ */
+static UINT drive_process_irp(DRIVE_DEVICE* drive, IRP* irp)
 {
+	UINT error;
+
 	irp->IoStatus = STATUS_SUCCESS;
 
 	switch (irp->MajorFunction)
 	{
 		case IRP_MJ_CREATE:
-			drive_process_irp_create(disk, irp);
+			error = drive_process_irp_create(drive, irp);
 			break;
 
 		case IRP_MJ_CLOSE:
-			drive_process_irp_close(disk, irp);
+			error = drive_process_irp_close(drive, irp);
 			break;
 
 		case IRP_MJ_READ:
-			drive_process_irp_read(disk, irp);
+			error = drive_process_irp_read(drive, irp);
 			break;
 
 		case IRP_MJ_WRITE:
-			drive_process_irp_write(disk, irp);
+			error = drive_process_irp_write(drive, irp);
 			break;
 
 		case IRP_MJ_QUERY_INFORMATION:
-			drive_process_irp_query_information(disk, irp);
+			error = drive_process_irp_query_information(drive, irp);
 			break;
 
 		case IRP_MJ_SET_INFORMATION:
-			drive_process_irp_set_information(disk, irp);
+			error = drive_process_irp_set_information(drive, irp);
 			break;
 
 		case IRP_MJ_QUERY_VOLUME_INFORMATION:
-			drive_process_irp_query_volume_information(disk, irp);
+			error = drive_process_irp_query_volume_information(drive, irp);
 			break;
 
-		case IRP_MJ_LOCK_CONTROL :
-			DEBUG_WARN("MajorFunction IRP_MJ_LOCK_CONTROL silent ignored");
-			drive_process_irp_silent_ignore(disk, irp);
+		case IRP_MJ_LOCK_CONTROL:
+			error = drive_process_irp_silent_ignore(drive, irp);
 			break;
 
 		case IRP_MJ_DIRECTORY_CONTROL:
-			drive_process_irp_directory_control(disk, irp);
+			error = drive_process_irp_directory_control(drive, irp);
 			break;
 
 		case IRP_MJ_DEVICE_CONTROL:
-			drive_process_irp_device_control(disk, irp);
+			error = drive_process_irp_device_control(drive, irp);
 			break;
 
 		default:
-			DEBUG_WARN("MajorFunction 0x%X not supported", irp->MajorFunction);
 			irp->IoStatus = STATUS_NOT_SUPPORTED;
-			irp->Complete(irp);
+			error = irp->Complete(irp);
 			break;
 	}
-}
-
-static void drive_process_irp_list(DRIVE_DEVICE* disk)
-{
-	IRP* irp;
-
-	while (1)
-	{
-		if (WaitForSingleObject(disk->stopEvent, 0) == WAIT_OBJECT_0)
-			break;
-
-		irp = (IRP*) InterlockedPopEntrySList(disk->pIrpList);
-
-		if (irp == NULL)
-			break;
-
-		drive_process_irp(disk, irp);
-	}
+	return error;
 }
 
 static void* drive_thread_func(void* arg)
 {
-	DRIVE_DEVICE* disk = (DRIVE_DEVICE*) arg;
+	IRP* irp;
+	wMessage message;
+	DRIVE_DEVICE* drive = (DRIVE_DEVICE*) arg;
+	UINT error = CHANNEL_RC_OK;
 
 	while (1)
 	{
-		WaitForSingleObject(disk->irpEvent, INFINITE);
+		if (!MessageQueue_Wait(drive->IrpQueue))
+		{
+			WLog_ERR(TAG, "MessageQueue_Wait failed!");
+			error = ERROR_INTERNAL_ERROR;
+			break;
+		}
 
-		if (WaitForSingleObject(disk->stopEvent, 0) == WAIT_OBJECT_0)
+		if (!MessageQueue_Peek(drive->IrpQueue, &message, TRUE))
+		{
+			WLog_ERR(TAG, "MessageQueue_Peek failed!");
+			error = ERROR_INTERNAL_ERROR;
+			break;
+		}
+
+		if (message.id == WMQ_QUIT)
 			break;
 
-		ResetEvent(disk->irpEvent);
-		drive_process_irp_list(disk);
+		irp = (IRP*) message.wParam;
+
+		if (irp)
+			if ((error = drive_process_irp(drive, irp)))
+			{
+				WLog_ERR(TAG, "drive_process_irp failed with error %lu!", error);
+				break;
+			}
 	}
 
+	if (error && drive->rdpcontext)
+		setChannelError(drive->rdpcontext, error, "drive_thread_func reported an error");
+	ExitThread((DWORD)error);
 	return NULL;
 }
 
-static void drive_irp_request(DEVICE* device, IRP* irp)
+/**
+ * Function description
+ *
+ * @return 0 on success, otherwise a Win32 error code
+ */
+static UINT drive_irp_request(DEVICE* device, IRP* irp)
 {
-	DRIVE_DEVICE* disk = (DRIVE_DEVICE*) device;
-
-	InterlockedPushEntrySList(disk->pIrpList, &(irp->ItemEntry));
-
-	SetEvent(disk->irpEvent);
+	DRIVE_DEVICE* drive = (DRIVE_DEVICE*) device;
+	if (!MessageQueue_Post(drive->IrpQueue, NULL, 0, (void*) irp, NULL))
+	{
+		WLog_ERR(TAG, "MessageQueue_Post failed!");
+		return ERROR_INTERNAL_ERROR;
+	}
+	return CHANNEL_RC_OK;
 }
 
-static void drive_free(DEVICE* device)
+/**
+ * Function description
+ *
+ * @return 0 on success, otherwise a Win32 error code
+ */
+static UINT drive_free(DEVICE* device)
 {
-	IRP* irp;
-	DRIVE_FILE* file;
-	DRIVE_DEVICE* disk = (DRIVE_DEVICE*) device;
+	DRIVE_DEVICE* drive = (DRIVE_DEVICE*) device;
+    UINT error = CHANNEL_RC_OK;
 
-	SetEvent(disk->stopEvent);
-	CloseHandle(disk->thread);
-	CloseHandle(disk->irpEvent);
+	if (MessageQueue_PostQuit(drive->IrpQueue, 0) && (WaitForSingleObject(drive->thread, INFINITE) == WAIT_FAILED))
+    {
+        error = GetLastError();
+        WLog_ERR(TAG, "WaitForSingleObject failed with error %lu", error);
+        return error;
+    }
 
-	while ((irp = (IRP*) InterlockedPopEntrySList(disk->pIrpList)) != NULL)
-		irp->Discard(irp);
+	CloseHandle(drive->thread);
 
-	_aligned_free(disk->pIrpList);
+	ListDictionary_Free(drive->files);
+	MessageQueue_Free(drive->IrpQueue);
 
-	/* Cleaning up; no need to check for drive_file_free error. */
-	while ((file = (DRIVE_FILE*) list_dequeue(disk->files)) != NULL)
-		(void) drive_file_free(file, TRUE);
+	Stream_Free(drive->device.data, TRUE);
 
-	list_free(disk->files);
-
-	free(disk);
+	free(drive);
+    return error;
 }
 
-void drive_register_drive_path(PDEVICE_SERVICE_ENTRY_POINTS pEntryPoints, char* name, char* path)
+/**
+ * Function description
+ *
+ * @return 0 on success, otherwise a Win32 error code
+ */
+UINT drive_register_drive_path(PDEVICE_SERVICE_ENTRY_POINTS pEntryPoints, char* name, char* path)
 {
 	int i, length;
-	DRIVE_DEVICE* disk;
+	DRIVE_DEVICE* drive;
+	UINT error;
 
 #ifdef WIN32
 	/*
@@ -705,59 +791,113 @@ void drive_register_drive_path(PDEVICE_SERVICE_ENTRY_POINTS pEntryPoints, char* 
 
 	if (name[0] && path[0])
 	{
-		disk = (DRIVE_DEVICE*) malloc(sizeof(DRIVE_DEVICE));
-		ZeroMemory(disk, sizeof(DRIVE_DEVICE));
+		drive = (DRIVE_DEVICE*) calloc(1, sizeof(DRIVE_DEVICE));
+		if (!drive)
+		{
+			WLog_ERR(TAG, "calloc failed!");
+			return CHANNEL_RC_NO_MEMORY;
+		}
 
-		disk->device.type = RDPDR_DTYP_FILESYSTEM;
-		disk->device.name = name;
-		disk->device.IRPRequest = drive_irp_request;
-		disk->device.Free = drive_free;
+		drive->device.type = RDPDR_DTYP_FILESYSTEM;
+		drive->device.name = name;
+		drive->device.IRPRequest = drive_irp_request;
+		drive->device.Free = drive_free;
+		drive->rdpcontext = pEntryPoints->rdpcontext;
 
-		length = strlen(name);
-		disk->device.data = Stream_New(NULL, length + 1);
+		length = (int) strlen(name);
+		drive->device.data = Stream_New(NULL, length + 1);
+		if (!drive->device.data)
+		{
+			WLog_ERR(TAG, "Stream_New failed!");
+			error = CHANNEL_RC_NO_MEMORY;
+			goto out_error;
+		}
 
 		for (i = 0; i <= length; i++)
-			Stream_Write_UINT8(disk->device.data, name[i] < 0 ? '_' : name[i]);
+			Stream_Write_UINT8(drive->device.data, name[i] < 0 ? '_' : name[i]);
 
-		disk->path = path;
-		disk->files = list_new();
+		drive->path = path;
 
-		disk->pIrpList = (PSLIST_HEADER) _aligned_malloc(sizeof(SLIST_HEADER), MEMORY_ALLOCATION_ALIGNMENT);
-		InitializeSListHead(disk->pIrpList);
+		drive->files = ListDictionary_New(TRUE);
+		if (!drive->files)
+		{
+			WLog_ERR(TAG, "ListDictionary_New failed!");
+			error = CHANNEL_RC_NO_MEMORY;
+			goto out_error;
+		}
+		ListDictionary_ValueObject(drive->files)->fnObjectFree = (OBJECT_FREE_FN) drive_file_free;
 
-		disk->irpEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
-		disk->stopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
-		disk->thread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) drive_thread_func, disk, CREATE_SUSPENDED, NULL);
+		drive->IrpQueue = MessageQueue_New(NULL);
+		if (!drive->IrpQueue)
+		{
+			WLog_ERR(TAG, "ListDictionary_New failed!");
+			error = CHANNEL_RC_NO_MEMORY;
+			goto out_error;
+		}
 
-		pEntryPoints->RegisterDevice(pEntryPoints->devman, (DEVICE*) disk);
+		if ((error = pEntryPoints->RegisterDevice(pEntryPoints->devman, (DEVICE*) drive)))
+		{
+			WLog_ERR(TAG, "RegisterDevice failed with error %lu!", error);
+			goto out_error;
+		}
 
-                ResumeThread(disk->thread);
+		if (!(drive->thread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) drive_thread_func, drive, CREATE_SUSPENDED, NULL)))
+		{
+			WLog_ERR(TAG, "CreateThread failed!");
+			goto out_error;
+		}
+
+		ResumeThread(drive->thread);
 	}
+	return CHANNEL_RC_OK;
+out_error:
+	MessageQueue_Free(drive->IrpQueue);
+	ListDictionary_Free(drive->files);
+	free(drive);
+	return error;
 }
 
 #ifdef STATIC_CHANNELS
 #define DeviceServiceEntry	drive_DeviceServiceEntry
+#else
+#define DeviceServiceEntry	FREERDP_API DeviceServiceEntry
 #endif
 
-int DeviceServiceEntry(PDEVICE_SERVICE_ENTRY_POINTS pEntryPoints)
+UINT sys_code_page = 0;
+
+/**
+ * Function description
+ *
+ * @return 0 on success, otherwise a Win32 error code
+ */
+UINT DeviceServiceEntry(PDEVICE_SERVICE_ENTRY_POINTS pEntryPoints)
 {
 	RDPDR_DRIVE* drive;
+	UINT error;
 #ifdef WIN32
 	char* dev;
 	int len;
 	char devlist[512], buf[512];
+	char *bufdup;
+	char *devdup;
 #endif
 
 	drive = (RDPDR_DRIVE*) pEntryPoints->device;
 
 #ifndef WIN32
 
+	sys_code_page = CP_UTF8;
 	if (strcmp(drive->Path, "*") == 0)
 	{
 		/* all drives */
 
 		free(drive->Path);
 		drive->Path = _strdup("/");
+		if (!drive->Path)
+		{
+			WLog_ERR(TAG, "_strdup failed!");
+			return CHANNEL_RC_NO_MEMORY;
+		}
 	}
 	else if (strcmp(drive->Path, "%") == 0)
 	{
@@ -769,20 +909,42 @@ int DeviceServiceEntry(PDEVICE_SERVICE_ENTRY_POINTS pEntryPoints)
 		free(drive->Path);
 
 		if (home_env)
+		{
 			drive->Path = _strdup(home_env);
+			if (!drive->Path)
+			{
+				WLog_ERR(TAG, "_strdup failed!");
+				return CHANNEL_RC_NO_MEMORY;
+			}
+		}
 		else
+		{
 			drive->Path = _strdup("/");
+			if (!drive->Path)
+			{
+				WLog_ERR(TAG, "_strdup failed!");
+				return CHANNEL_RC_NO_MEMORY;
+			}
+		}
 	}
 
-        drive_register_drive_path(pEntryPoints, drive->Name, drive->Path);
+	error = drive_register_drive_path(pEntryPoints, drive->Name, drive->Path);
 
 #else
-        /* Special case: path[0] == '*' -> export all drives */
+	sys_code_page = GetACP();
+	/* Special case: path[0] == '*' -> export all drives */
 	/* Special case: path[0] == '%' -> user home dir */
-        if (strcmp(drive->Path, "%") == 0)
+	if (strcmp(drive->Path, "%") == 0)
 	{
-		_snprintf(buf, sizeof(buf), "%s\\", getenv("USERPROFILE"));
-		drive_register_drive_path(pEntryPoints, drive->Name, _strdup(buf));
+		sprintf_s(buf, sizeof(buf), "%s\\", getenv("USERPROFILE"));
+		free(drive->Path);
+		drive->Path = _strdup(buf);
+		if (!drive->Path)
+		{
+			WLog_ERR(TAG, "_strdup failed!");
+			return CHANNEL_RC_NO_MEMORY;
+		}
+		error = drive_register_drive_path(pEntryPoints, drive->Name, drive->Path);
 	}
 	else if (strcmp(drive->Path, "*") == 0)
 	{
@@ -794,23 +956,36 @@ int DeviceServiceEntry(PDEVICE_SERVICE_ENTRY_POINTS pEntryPoints)
 		for (dev = devlist, i = 0; *dev; dev += 4, i++)
 		{
 			if (*dev > 'B')
-                        {
+			{
 				/* Suppress disk drives A and B to avoid pesty messages */
-				_snprintf(buf, sizeof(buf) - 4, "%s", drive->Name);
-				len = strlen(buf);
+				len = sprintf_s(buf, sizeof(buf) - 4, "%s", drive->Name);
 				buf[len] = '_';
 				buf[len + 1] = dev[0];
 				buf[len + 2] = 0;
 				buf[len + 3] = 0;
-				drive_register_drive_path(pEntryPoints, _strdup(buf), _strdup(dev));
+				if (!(bufdup = _strdup(buf)))
+				{
+					WLog_ERR(TAG, "_strdup failed!");
+					return CHANNEL_RC_NO_MEMORY;
+				}
+				if (!(devdup = _strdup(dev)))
+				{
+					WLog_ERR(TAG, "_strdup failed!");
+					return CHANNEL_RC_NO_MEMORY;
+				}
+
+				if ((error = drive_register_drive_path(pEntryPoints, bufdup, devdup)))
+				{
+					break;
+				}
 			}
 		}
 	}
-        else
-        {
-		drive_register_drive_path(pEntryPoints, drive->Name, drive->Path);
+	else
+	{
+		error = drive_register_drive_path(pEntryPoints, drive->Name, drive->Path);
 	}
 #endif
-	
-        return 0;
- }
+
+	return error;
+}

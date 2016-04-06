@@ -22,8 +22,11 @@
 #endif
 
 #include <freerdp/utils/pcap.h>
+#include <freerdp/log.h>
 
 #include "surface.h"
+
+#define TAG FREERDP_TAG("core.surface")
 
 static int update_recv_surfcmd_surface_bits(rdpUpdate* update, wStream* s, UINT32* length)
 {
@@ -40,7 +43,7 @@ static int update_recv_surfcmd_surface_bits(rdpUpdate* update, wStream* s, UINT3
 	Stream_Read_UINT8(s, cmd->bpp);
 	if ((cmd->bpp < 1) || (cmd->bpp > 32))
 	{
-		fprintf(stderr, "%s: invalid bpp value %d", __FUNCTION__, cmd->bpp);
+		WLog_ERR(TAG, "invalid bpp value %d", cmd->bpp);
 		return FALSE;
 	}
 
@@ -59,6 +62,11 @@ static int update_recv_surfcmd_surface_bits(rdpUpdate* update, wStream* s, UINT3
 	Stream_SetPosition(s, pos);
 	*length = 20 + cmd->bitmapDataLength;
 
+	WLog_Print(update->log, WLOG_DEBUG,
+			   "SurfaceBits: destLeft: %d destTop: %d destRight: %d destBottom: %d "
+			   "bpp: %d codecId: %d width: %d height: %d bitmapDataLength: %d",
+			   cmd->destLeft, cmd->destTop, cmd->destRight, cmd->destBottom,
+			   cmd->bpp, cmd->codecID, cmd->width, cmd->height, cmd->bitmapDataLength);
 	IFCALL(update->SurfaceBits, update->context, cmd);
 
 	return 0;
@@ -74,6 +82,10 @@ static int update_recv_surfcmd_frame_marker(rdpUpdate* update, wStream* s, UINT3
 	Stream_Read_UINT16(s, marker->frameAction);
 	Stream_Read_UINT32(s, marker->frameId);
 
+	WLog_Print(update->log, WLOG_DEBUG, "SurfaceFrameMarker: action: %s (%d) id: %d",
+			(!marker->frameAction) ? "Begin" : "End",
+			marker->frameAction, marker->frameId);
+
 	IFCALL(update->SurfaceFrameMarker, update->context, marker);
 
 	*length = 6;
@@ -85,7 +97,7 @@ int update_recv_surfcmds(rdpUpdate* update, UINT32 size, wStream* s)
 {
 	BYTE* mark;
 	UINT16 cmdType;
-	UINT32 cmdLength;
+	UINT32 cmdLength = 0;
 
 	while (size > 2)
 	{
@@ -108,7 +120,7 @@ int update_recv_surfcmds(rdpUpdate* update, UINT32 size, wStream* s)
 				break;
 
 			default:
-				DEBUG_WARN("unknown cmdType 0x%X", cmdType);
+				WLog_ERR(TAG, "unknown cmdType 0x%X", cmdType);
 				return -1;
 		}
 
@@ -116,6 +128,7 @@ int update_recv_surfcmds(rdpUpdate* update, UINT32 size, wStream* s)
 
 		if (update->dump_rfx)
 		{
+			/* TODO: treat return values */
 			pcap_add_record(update->pcap_rfx, mark, cmdLength + 2);
 			pcap_flush(update->pcap_rfx);
 		}
@@ -124,9 +137,10 @@ int update_recv_surfcmds(rdpUpdate* update, UINT32 size, wStream* s)
 	return 0;
 }
 
-void update_write_surfcmd_surface_bits_header(wStream* s, SURFACE_BITS_COMMAND* cmd)
+BOOL update_write_surfcmd_surface_bits_header(wStream* s, SURFACE_BITS_COMMAND* cmd)
 {
-	Stream_EnsureRemainingCapacity(s, SURFCMD_SURFACE_BITS_HEADER_LENGTH);
+	if (!Stream_EnsureRemainingCapacity(s, SURFCMD_SURFACE_BITS_HEADER_LENGTH))
+		return FALSE;
 
 	Stream_Write_UINT16(s, CMDTYPE_STREAM_SURFACE_BITS);
 
@@ -140,14 +154,18 @@ void update_write_surfcmd_surface_bits_header(wStream* s, SURFACE_BITS_COMMAND* 
 	Stream_Write_UINT16(s, cmd->width);
 	Stream_Write_UINT16(s, cmd->height);
 	Stream_Write_UINT32(s, cmd->bitmapDataLength);
+
+	return TRUE;
 }
 
-void update_write_surfcmd_frame_marker(wStream* s, UINT16 frameAction, UINT32 frameId)
+BOOL update_write_surfcmd_frame_marker(wStream* s, UINT16 frameAction, UINT32 frameId)
 {
-	Stream_EnsureRemainingCapacity(s, SURFCMD_FRAME_MARKER_LENGTH);
+	if (!Stream_EnsureRemainingCapacity(s, SURFCMD_FRAME_MARKER_LENGTH))
+		return FALSE;
 
 	Stream_Write_UINT16(s, CMDTYPE_FRAME_MARKER);
 
 	Stream_Write_UINT16(s, frameAction);
 	Stream_Write_UINT32(s, frameId);
+	return TRUE;
 }

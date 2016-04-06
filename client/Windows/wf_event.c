@@ -27,18 +27,29 @@
 
 #include <freerdp/freerdp.h>
 
-#include "wf_interface.h"
+#include "wf_client.h"
 
 #include "wf_gdi.h"
 #include "wf_event.h"
 
+#include <freerdp/event.h>
+
 static HWND g_focus_hWnd;
 
-#define X_POS(lParam) (lParam & 0xFFFF)
-#define Y_POS(lParam) ((lParam >> 16) & 0xFFFF)
+#define X_POS(lParam) ((UINT16) (lParam & 0xFFFF))
+#define Y_POS(lParam) ((UINT16) ((lParam >> 16) & 0xFFFF))
 
 BOOL wf_scale_blt(wfContext* wfc, HDC hdc, int x, int y, int w, int h, HDC hdcSrc, int x1, int y1, DWORD rop);
 void wf_scale_mouse_event(wfContext* wfc, rdpInput* input, UINT16 flags, UINT16 x, UINT16 y);
+
+static BOOL g_flipping_in;
+static BOOL g_flipping_out;
+
+static BOOL alt_ctrl_down()
+{
+	return ((GetAsyncKeyState(VK_CONTROL) & 0x8000) ||
+		(GetAsyncKeyState(VK_MENU) & 0x8000));
+}
 
 LRESULT CALLBACK wf_ll_kbd_proc(int nCode, WPARAM wParam, LPARAM lParam)
 {
@@ -48,6 +59,13 @@ LRESULT CALLBACK wf_ll_kbd_proc(int nCode, WPARAM wParam, LPARAM lParam)
 	PKBDLLHOOKSTRUCT p;
 
 	DEBUG_KBD("Low-level keyboard hook, hWnd %X nCode %X wParam %X", g_focus_hWnd, nCode, wParam);
+
+	if (g_flipping_in)
+	{
+		if (!alt_ctrl_down())
+			g_flipping_in = FALSE;
+		return CallNextHookEx(NULL, nCode, wParam, lParam);
+	}
 
 	if (g_focus_hWnd && (nCode == HC_ACTION))
 	{
@@ -114,8 +132,8 @@ LRESULT CALLBACK wf_ll_kbd_proc(int nCode, WPARAM wParam, LPARAM lParam)
 
 				freerdp_input_send_keyboard_event_ex(input, !(p->flags & LLKHF_UP), rdp_scancode);
 
-				if (p->vkCode == VK_CAPITAL)
-					DEBUG_KBD("caps lock is processed on client side too to toggle caps lock indicator");
+				if (p->vkCode == VK_NUMLOCK || p->vkCode == VK_CAPITAL || p->vkCode == VK_SCROLL || p->vkCode == VK_KANA)
+					DEBUG_KBD("lock keys are processed on client side too to toggle their indicators");
 				else
 					return 1;
 
@@ -123,7 +141,50 @@ LRESULT CALLBACK wf_ll_kbd_proc(int nCode, WPARAM wParam, LPARAM lParam)
 		}
 	}
 
+	if (g_flipping_out)
+	{
+		if (!alt_ctrl_down())
+		{
+			g_flipping_out = FALSE;
+			g_focus_hWnd = NULL;
+		}
+	}
+
 	return CallNextHookEx(NULL, nCode, wParam, lParam);
+}
+
+void wf_event_focus_in(wfContext* wfc)
+{
+	UINT16 syncFlags;
+	rdpInput* input;
+	POINT pt;
+	RECT rc;
+
+	input = wfc->instance->input;
+
+	syncFlags = 0;
+
+	if (GetKeyState(VK_NUMLOCK))
+		syncFlags |= KBD_SYNC_NUM_LOCK;
+
+	if (GetKeyState(VK_CAPITAL))
+		syncFlags |= KBD_SYNC_CAPS_LOCK;
+
+	if (GetKeyState(VK_SCROLL))
+		syncFlags |= KBD_SYNC_SCROLL_LOCK;
+
+	if (GetKeyState(VK_KANA))
+		syncFlags |= KBD_SYNC_KANA_LOCK;
+
+	input->FocusInEvent(input, syncFlags);
+
+	/* send pointer position if the cursor is currently inside our client area */
+	GetCursorPos(&pt);
+	ScreenToClient(wfc->hwnd, &pt);
+	GetClientRect(wfc->hwnd, &rc);
+
+	if (pt.x >= rc.left && pt.x < rc.right && pt.y >= rc.top && pt.y < rc.bottom)
+		input->MouseEvent(input, PTR_FLAGS_MOVE, (UINT16)pt.x, (UINT16)pt.y);
 }
 
 static int wf_event_process_WM_MOUSEWHEEL(wfContext* wfc, HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
@@ -189,20 +250,20 @@ void wf_sizing(wfContext* wfc, WPARAM wParam, LPARAM lParam)
 LRESULT CALLBACK wf_event_proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam)
 {
 	HDC hdc;
-	LONG ptr;
+	LONG_PTR ptr;
 	wfContext* wfc;
 	int x, y, w, h;
 	PAINTSTRUCT ps;
 	rdpInput* input;
 	BOOL processed;
 	RECT windowRect;
-	RECT clientRect;
 	MINMAXINFO* minmax;
 	SCROLLINFO si;
 
 	processed = TRUE;
 	ptr = GetWindowLongPtr(hWnd, GWLP_USERDATA);
 	wfc = (wfContext*) ptr;
+
 
 	if (wfc != NULL)
 	{
@@ -230,7 +291,10 @@ LRESULT CALLBACK wf_event_proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam
 					// Set maximum window size for resizing
 
 					minmax = (MINMAXINFO*) lParam;
-					wf_update_canvas_diff(wfc);
+
+					//always use the last determined canvas diff, because it could be
+					//that the window is minimized when this gets called
+					//wf_update_canvas_diff(wfc);
 
 					if (!wfc->fullscreen)
 					{
@@ -256,11 +320,14 @@ LRESULT CALLBACK wf_event_proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam
 					wfc->client_y = windowRect.top;
 				}
 				
-				wf_size_scrollbars(wfc, LOWORD(lParam), HIWORD(lParam));
+				if (wfc->client_width && wfc->client_height)
+				{
+					wf_size_scrollbars(wfc, LOWORD(lParam), HIWORD(lParam));
 
-				// Workaround: when the window is maximized, the call to "ShowScrollBars" returns TRUE but has no effect.
-				if (wParam == SIZE_MAXIMIZED && !wfc->fullscreen)
-					SetWindowPos(wfc->hwnd, HWND_TOP, 0, 0, windowRect.right - windowRect.left, windowRect.bottom - windowRect.top, SWP_NOMOVE | SWP_FRAMECHANGED);
+					// Workaround: when the window is maximized, the call to "ShowScrollBars" returns TRUE but has no effect.
+					if (wParam == SIZE_MAXIMIZED && !wfc->fullscreen)
+						SetWindowPos(wfc->hwnd, HWND_TOP, 0, 0, windowRect.right - windowRect.left, windowRect.bottom - windowRect.top, SWP_NOMOVE | SWP_FRAMECHANGED);
+				}
 
 				break;
 
@@ -286,7 +353,7 @@ LRESULT CALLBACK wf_event_proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam
 				break;
 
 			case WM_LBUTTONDOWN:
-				wf_scale_mouse_event(wfc, input,PTR_FLAGS_DOWN | PTR_FLAGS_BUTTON1, X_POS(lParam) - wfc->offset_x, Y_POS(lParam) - wfc->offset_y);
+				wf_scale_mouse_event(wfc, input, PTR_FLAGS_DOWN | PTR_FLAGS_BUTTON1, X_POS(lParam) - wfc->offset_x, Y_POS(lParam) - wfc->offset_y);
 				break;
 
 			case WM_LBUTTONUP:
@@ -505,27 +572,38 @@ LRESULT CALLBACK wf_event_proc(HWND hWnd, UINT Msg, WPARAM wParam, LPARAM lParam
 
 		case WM_SETFOCUS:
 			DEBUG_KBD("getting focus %X", hWnd);
+			if (alt_ctrl_down())
+				g_flipping_in = TRUE;
 			g_focus_hWnd = hWnd;
+			freerdp_set_focus(wfc->instance);
 			break;
 
 		case WM_KILLFOCUS:
 			if (g_focus_hWnd == hWnd && wfc && !wfc->fullscreen)
 			{
 				DEBUG_KBD("loosing focus %X", hWnd);
-				g_focus_hWnd = NULL;
+				if (alt_ctrl_down())
+					g_flipping_out = TRUE;
+				else
+					g_focus_hWnd = NULL;
 			}
 			break;
 
 		case WM_ACTIVATE:
 			{
-				int activate = (int)(short) LOWORD(lParam);
+				int activate = (int)(short) LOWORD(wParam);
 				if (activate != WA_INACTIVE)
 				{
+					if (alt_ctrl_down())
+						g_flipping_in = TRUE;
 					g_focus_hWnd = hWnd;
 				}
 				else
 				{
-					g_focus_hWnd = NULL;
+					if (alt_ctrl_down())
+						g_flipping_out = TRUE;
+					else
+						g_focus_hWnd = NULL;
 				}
 			}
 
@@ -576,6 +654,8 @@ BOOL wf_scale_blt(wfContext* wfc, HDC hdc, int x, int y, int w, int h, HDC hdcSr
 void wf_scale_mouse_event(wfContext* wfc, rdpInput* input, UINT16 flags, UINT16 x, UINT16 y)
 {
 	int ww, wh, dw, dh;
+	rdpContext* context;
+	MouseEventEventArgs eventArgs;
 
 	if (!wfc->client_width)
 		wfc->client_width = wfc->width;
@@ -588,8 +668,14 @@ void wf_scale_mouse_event(wfContext* wfc, rdpInput* input, UINT16 flags, UINT16 
 	dw = wfc->instance->settings->DesktopWidth;
 	dh = wfc->instance->settings->DesktopHeight;
 
-	if (!wfc->instance->settings->SmartSizing || (ww == dw) && (wh == dh))
+	if (!wfc->instance->settings->SmartSizing || ((ww == dw) && (wh == dh)))
 		input->MouseEvent(input, flags, x + wfc->xCurrentScroll, y + wfc->yCurrentScroll);
 	else
 		input->MouseEvent(input, flags, x * dw / ww + wfc->xCurrentScroll, y * dh / wh + wfc->yCurrentScroll);
+
+	eventArgs.flags = flags;
+	eventArgs.x = x;
+	eventArgs.y = y;
+	context = (rdpContext*) wfc;
+	PubSub_OnMouseEvent(context->pubSub, context, &eventArgs);
 }

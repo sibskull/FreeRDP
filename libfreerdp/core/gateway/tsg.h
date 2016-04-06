@@ -31,13 +31,14 @@ typedef struct rdp_tsg rdpTsg;
 #include <winpr/rpc.h>
 #include <winpr/winpr.h>
 #include <winpr/wtypes.h>
+#include <winpr/synch.h>
 #include <winpr/error.h>
 
 #include <time.h>
 #include <freerdp/types.h>
 #include <freerdp/settings.h>
 
-#include <freerdp/utils/debug.h>
+#include <freerdp/log.h>
 
 enum _TSG_STATE
 {
@@ -51,25 +52,6 @@ enum _TSG_STATE
 	TSG_STATE_FINAL
 };
 typedef enum _TSG_STATE TSG_STATE;
-
-struct rdp_tsg
-{
-	rdpRpc* rpc;
-	UINT16 Port;
-	RPC_PDU* pdu;
-	LPWSTR Hostname;
-	LPWSTR MachineName;
-	TSG_STATE state;
-	BOOL PendingPdu;
-	UINT32 BytesRead;
-	UINT32 BytesAvailable;
-	UINT32 StubOffset;
-	UINT32 StubLength;
-	rdpSettings* settings;
-	rdpTransport* transport;
-	CONTEXT_HANDLE TunnelContext;
-	CONTEXT_HANDLE ChannelContext;
-};
 
 typedef WCHAR* RESOURCENAME;
 
@@ -121,6 +103,7 @@ typedef struct _tsendpointinfo
 #define TSG_MESSAGING_CAP_CONSENT_SIGN			0x00000004
 #define TSG_MESSAGING_CAP_SERVICE_MSG			0x00000008
 #define TSG_MESSAGING_CAP_REAUTH			0x00000010
+#define TSG_MESSAGING_MAX_MESSAGE_LENGTH		65536
 
 /* Error Codes */
 
@@ -302,23 +285,50 @@ typedef struct _TSG_PACKET
 	TSG_PACKET_TYPE_UNION tsgPacket;
 } TSG_PACKET, *PTSG_PACKET;
 
+struct rdp_tsg
+{
+	BIO* bio;
+	rdpRpc* rpc;
+	UINT16 Port;
+	LPWSTR Hostname;
+	LPWSTR MachineName;
+	TSG_STATE state;
+	UINT32 TunnelId;
+	UINT32 ChannelId;
+	BOOL reauthSequence;
+	rdpSettings* settings;
+	rdpTransport* transport;
+	UINT64 ReauthTunnelContext;
+	CONTEXT_HANDLE TunnelContext;
+	CONTEXT_HANDLE ChannelContext;
+	CONTEXT_HANDLE NewTunnelContext;
+	CONTEXT_HANDLE NewChannelContext;
+	TSG_PACKET_REAUTH packetReauth;
+	TSG_PACKET_CAPABILITIES tsgCaps;
+	TSG_PACKET_VERSIONCAPS packetVersionCaps;
+};
+
+int tsg_proxy_begin(rdpTsg* tsg);
+int tsg_proxy_reauth(rdpTsg* tsg);
+
 DWORD TsProxySendToServer(handle_t IDL_handle, BYTE pRpcMessage[], UINT32 count, UINT32* lengths);
 
-BOOL tsg_connect(rdpTsg* tsg, const char* hostname, UINT16 port);
+int tsg_transition_to_state(rdpTsg* tsg, TSG_STATE state);
+
+BOOL tsg_connect(rdpTsg* tsg, const char* hostname, UINT16 port, int timeout);
 BOOL tsg_disconnect(rdpTsg* tsg);
 
 int tsg_write(rdpTsg* tsg, BYTE* data, UINT32 length);
 int tsg_read(rdpTsg* tsg, BYTE* data, UINT32 length);
 
-BOOL tsg_set_blocking_mode(rdpTsg* tsg, BOOL blocking);
+int tsg_recv_pdu(rdpTsg* tsg, RPC_PDU* pdu);
+
+int tsg_check_event_handles(rdpTsg* tsg);
+DWORD tsg_get_event_handles(rdpTsg* tsg, HANDLE* events, DWORD count);
 
 rdpTsg* tsg_new(rdpTransport* transport);
 void tsg_free(rdpTsg* tsg);
 
-#ifdef WITH_DEBUG_TSG
-#define DEBUG_TSG(fmt, ...) DEBUG_CLASS(TSG, fmt, ## __VA_ARGS__)
-#else
-#define DEBUG_TSG(fmt, ...) DEBUG_NULL(fmt, ## __VA_ARGS__)
-#endif
+BIO_METHOD* BIO_s_tsg(void);
 
 #endif /* FREERDP_CORE_TSG_H */

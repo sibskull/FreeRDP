@@ -59,14 +59,14 @@ struct mf_peer_context
 	NSC_CONTEXT* nsc_context;
 	
 	//#ifdef WITH_SERVER_CHANNELS
-	WTSVirtualChannelManager* vcm;
+	HANDLE vcm;
 	//#endif
 	//#ifdef CHANNEL_AUDIN_SERVER
 	audin_server_context* audin;
 	//#endif
 	
 	//#ifdef CHANNEL_RDPSND_SERVER
-	rdpsnd_server_context* rdpsnd;
+	RdpsndServerContext* rdpsnd;
 	//#endif
 };
 

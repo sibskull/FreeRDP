@@ -94,6 +94,8 @@ typedef struct _SYSTEM_INFO
 	WORD wProcessorRevision;
 } SYSTEM_INFO, *LPSYSTEM_INFO;
 
+#define MAX_COMPUTERNAME_LENGTH 31
+
 WINPR_API void GetSystemInfo(LPSYSTEM_INFO lpSystemInfo);
 WINPR_API void GetNativeSystemInfo(LPSYSTEM_INFO lpSystemInfo);
 
@@ -214,7 +216,13 @@ WINPR_API BOOL GetVersionExW(LPOSVERSIONINFOW lpVersionInformation);
 #define GetVersionEx	GetVersionExA
 #endif
 
+WINPR_API void GetSystemTime(LPSYSTEMTIME lpSystemTime);
+WINPR_API BOOL SetSystemTime(CONST SYSTEMTIME* lpSystemTime);
+WINPR_API VOID GetLocalTime(LPSYSTEMTIME lpSystemTime);
+WINPR_API BOOL SetLocalTime(CONST SYSTEMTIME* lpSystemTime);
+
 WINPR_API VOID GetSystemTimeAsFileTime(LPFILETIME lpSystemTimeAsFileTime);
+WINPR_API BOOL GetSystemTimeAdjustment(PDWORD lpTimeAdjustment, PDWORD lpTimeIncrement, PBOOL lpTimeAdjustmentDisabled);
 
 WINPR_API DWORD GetTickCount(void);
 
@@ -289,23 +297,26 @@ WINPR_API ULONGLONG GetTickCount64(void);
 
 #endif
 
+WINPR_API DWORD GetTickCountPrecise(void);
+
 WINPR_API BOOL IsProcessorFeaturePresentEx(DWORD ProcessorFeature);
 
 /* extended flags */
-#define PF_EX_3DNOW_PREFETCH		1
-#define PF_EX_SSSE3			2
-#define PF_EX_SSE41			3
-#define PF_EX_SSE42			4
-#define PF_EX_AVX			5
-#define PF_EX_FMA			6
-#define PF_EX_AVX_AES			7
-#define PF_EX_AVX2			8
-#define PF_EX_ARM_VFP1			9
-#define PF_EX_ARM_VFP3D16		10
-#define PF_EX_ARM_VFP4			11
-#define PF_EX_ARM_IDIVA			12
-#define PF_EX_ARM_IDIVT			13
-#define PF_EX_AVX_PCLMULQDQ 14
+#define PF_EX_LZCNT			1
+#define PF_EX_3DNOW_PREFETCH		2
+#define PF_EX_SSSE3			3
+#define PF_EX_SSE41			4
+#define PF_EX_SSE42			5
+#define PF_EX_AVX			6
+#define PF_EX_FMA			7
+#define PF_EX_AVX_AES			8
+#define PF_EX_AVX2			9
+#define PF_EX_ARM_VFP1			10
+#define PF_EX_ARM_VFP3D16		11
+#define PF_EX_ARM_VFP4			12
+#define PF_EX_ARM_IDIVA			13
+#define PF_EX_ARM_IDIVT			14
+#define PF_EX_AVX_PCLMULQDQ		15
 
 /*
  * some "aliases" for the standard defines

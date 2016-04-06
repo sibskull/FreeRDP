@@ -25,10 +25,20 @@ int TestLibraryGetProcAddress(int argc, char* argv[])
 #ifdef UNICODE
 	length = MultiByteToWideChar(CP_UTF8, 0, str, strlen(str), NULL, 0);
 	BasePath = (WCHAR*) malloc((length + 1) * sizeof(WCHAR));
+	if (!BasePath)
+	{
+		_tprintf(_T("Memory allocation failed\n"));
+		return -1;
+	}
 	MultiByteToWideChar(CP_UTF8, 0, str, length, (LPWSTR) BasePath, length * sizeof(WCHAR));
 	BasePath[length] = 0;
 #else
 	BasePath = _strdup(str);
+	if (!BasePath)
+	{
+		printf("Memory allocation failed");
+		return -1;
+	}
 	length = strlen(BasePath);
 #endif
 	

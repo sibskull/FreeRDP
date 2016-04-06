@@ -57,6 +57,8 @@ VOID InitializeCallbackEnvironment_V3(TP_CALLBACK_ENVIRON_V3* pcbe)
 	pcbe->Size = sizeof(TP_CALLBACK_ENVIRON);
 }
 
+#endif
+
 #ifdef _WIN32
 
 static BOOL module_initialized = FALSE;
@@ -117,6 +119,8 @@ PTP_CALLBACK_ENVIRON GetDefaultThreadpoolEnvironment()
 }
 
 #endif
+
+#ifdef WINPR_THREAD_POOL
 
 VOID InitializeThreadpoolEnvironment(PTP_CALLBACK_ENVIRON pcbe)
 {

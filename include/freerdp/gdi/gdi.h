@@ -21,10 +21,13 @@
 #define FREERDP_GDI_H
 
 #include <freerdp/api.h>
+#include <freerdp/log.h>
 #include <freerdp/freerdp.h>
 #include <freerdp/cache/cache.h>
-#include <freerdp/utils/debug.h>
 #include <freerdp/codec/color.h>
+#include <freerdp/codec/region.h>
+
+#include <freerdp/client/rdpgfx.h>
 
 /* For more information, see [MS-RDPEGDI] */
 
@@ -113,13 +116,24 @@
 #define GDI_OPAQUE			0x00000001
 #define GDI_TRANSPARENT			0x00000002
 
+/* Fill Modes */
+#define GDI_FILL_ALTERNATE		0x01
+#define GDI_FILL_WINDING		0x02
+
 /* GDI Object Types */
-#define GDIOBJECT_BITMAP		0x00
-#define GDIOBJECT_PEN			0x01
-#define GDIOBJECT_PALETTE		0x02
-#define GDIOBJECT_BRUSH			0x03
-#define GDIOBJECT_RECT			0x04
-#define GDIOBJECT_REGION		0x04
+#define GDIOBJECT_BITMAP   0x00
+#define GDIOBJECT_PEN      0x01
+#define GDIOBJECT_PALETTE  0x02
+#define GDIOBJECT_BRUSH    0x03
+#define GDIOBJECT_RECT     0x04
+#define GDIOBJECT_REGION   0x05
+
+/* Region return values */
+#ifndef NULLREGION
+#define NULLREGION         0x01
+#define SIMPLEREGION       0x02
+#define COMPLEXREGION      0x03
+#endif
 
 struct _GDIOBJECT
 {
@@ -164,6 +178,7 @@ struct _GDI_BITMAP
 	int height;
 	int scanline;
 	BYTE* data;
+	void (*free)(void *);
 };
 typedef struct _GDI_BITMAP GDI_BITMAP;
 typedef GDI_BITMAP* HGDI_BITMAP;
@@ -210,6 +225,8 @@ struct _GDI_BRUSH
 	int style;
 	HGDI_BITMAP pattern;
 	GDI_COLOR color;
+	int nXOrg;
+	int nYOrg;
 };
 typedef struct _GDI_BRUSH GDI_BRUSH;
 typedef GDI_BRUSH* HGDI_BRUSH;
@@ -275,40 +292,50 @@ struct rdp_gdi
 	int cursor_x;
 	int cursor_y;
 	int bytesPerPixel;
+	rdpCodecs* codecs;
 
+	BOOL invert;
 	HGDI_DC hdc;
-	HCLRCONV clrconv;
+	UINT32 format;
 	gdiBitmap* primary;
 	gdiBitmap* drawing;
+	UINT32 bitmap_size;
+	BYTE* bitmap_buffer;
 	BYTE* primary_buffer;
 	GDI_COLOR textColor;
-	void* rfx_context;
-	void* nsc_context;
+	BYTE palette[256 * 4];
 	gdiBitmap* tile;
 	gdiBitmap* image;
+
+	BOOL inGfxFrame;
+	BOOL graphicsReset;
+	UINT16 outputSurfaceId;
+	REGION16 invalidRegion;
+	RdpgfxClientContext* gfx;
 };
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-FREERDP_API UINT32 gdi_rop3_code(BYTE code);
+FREERDP_API DWORD gdi_rop3_code(BYTE code);
+FREERDP_API UINT32 gdi_get_pixel_format(UINT32 bitsPerPixel, BOOL vFlip);
 FREERDP_API BYTE* gdi_get_bitmap_pointer(HGDI_DC hdcBmp, int x, int y);
 FREERDP_API BYTE* gdi_get_brush_pointer(HGDI_DC hdcBrush, int x, int y);
-FREERDP_API int gdi_is_mono_pixel_set(BYTE* data, int x, int y, int width);
-FREERDP_API void gdi_resize(rdpGdi* gdi, int width, int height);
+FREERDP_API BOOL gdi_resize(rdpGdi* gdi, int width, int height);
 
-FREERDP_API int gdi_init(freerdp* instance, UINT32 flags, BYTE* buffer);
+FREERDP_API BOOL gdi_init(freerdp* instance, UINT32 flags, BYTE* buffer);
 FREERDP_API void gdi_free(freerdp* instance);
 
 #ifdef __cplusplus
 }
 #endif
 
+#define GDI_TAG FREERDP_TAG("gdi")
 #ifdef WITH_DEBUG_GDI
-#define DEBUG_GDI(fmt, ...) DEBUG_CLASS(GDI, fmt, ## __VA_ARGS__)
+#define DEBUG_GDI(fmt, ...) WLog_DBG(GDI_TAG, fmt, ## __VA_ARGS__)
 #else
-#define DEBUG_GDI(fmt, ...) DEBUG_NULL(fmt, ## __VA_ARGS__)
+#define DEBUG_GDI(fmt, ...)
 #endif
 
 #endif /* FREERDP_GDI_H */

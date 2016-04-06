@@ -20,8 +20,8 @@
 #ifndef __XF_MONITOR_H
 #define __XF_MONITOR_H
 
+#include <freerdp/api.h>
 #include <freerdp/freerdp.h>
-#include <freerdp/rail/rail.h>
 
 struct _MONITOR_INFO
 {
@@ -43,7 +43,8 @@ typedef struct _VIRTUAL_SCREEN VIRTUAL_SCREEN;
 #include "xf_client.h"
 #include "xfreerdp.h"
 
-int xf_list_monitors(xfContext* xfc);
-BOOL xf_detect_monitors(xfContext* xfc, rdpSettings* settings);
+FREERDP_API int xf_list_monitors(xfContext* xfc);
+FREERDP_API BOOL xf_detect_monitors(xfContext* xfc, UINT32* pWidth, UINT32* pHeight);
+FREERDP_API void xf_monitors_free(xfContext* xfc);
 
 #endif /* __XF_MONITOR_H */

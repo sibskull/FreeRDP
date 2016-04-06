@@ -12,7 +12,7 @@ void CALLBACK test_WorkCallback(PTP_CALLBACK_INSTANCE instance, void* context, P
 	BYTE b[1024];
 	BYTE c[1024];
 
-	printf("Hello %s: %ld (thread: %lu)\n", (char *)context,
+	printf("Hello %s: %d (thread: %d)\n", (char*) context,
 		InterlockedIncrement(&count), GetCurrentThreadId());
 
 	for (index = 0; index < 100; index++)
@@ -58,9 +58,18 @@ int TestPoolWork(int argc, char* argv[])
 
 	printf("Private Thread Pool\n");
 
-	pool = CreateThreadpool(NULL);
+	if (!(pool = CreateThreadpool(NULL)))
+	{
+		printf("CreateThreadpool failure\n");
+		return -1;
+	}
 
-	SetThreadpoolThreadMinimum(pool, 4);
+	if (!SetThreadpoolThreadMinimum(pool, 4))
+	{
+		printf("SetThreadpoolThreadMinimum failure\n");
+		return -1;
+	}
+
 	SetThreadpoolThreadMaximum(pool, 8);
 
 	InitializeThreadpoolEnvironment(&environment);

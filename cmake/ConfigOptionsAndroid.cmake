@@ -1,7 +1,7 @@
 # FreeRDP cmake android options
 #
-# Copyright 2013 Thinstuff Technologies GmbH
-# Copyright 2013 Bernhard Miklautz <bmiklautz@thinstuff.at>
+# Copyright 2013 Thincast Technologies GmbH
+# Copyright 2013 Bernhard Miklautz <bernhard.miklautz@thincast.com>
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,6 +15,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-option(WITH_DEBUG_ANDROID_JNI "Enable debug output for android jni bindings" ${DEFAULT_DEBUG_OPTION})
-option(ANDROID_BUILD_JAVA "Automatically android java code - build type depends on CMAKE_BUILD_TYPE" ON)
-option(ANDROID_BUILD_JAVA_DEBUG "Create a android debug package" ON)
+option(WITH_OPENSLES "Enable sound and microphone redirection using OpenSLES" ON)
+
+set(ANDROID_APP_TARGET_SDK 21 CACHE STRING "Application target android SDK")
+set(ANDROID_APP_MIN_SDK 14 CACHE STRING "Application minimum android SDK requirement")
+

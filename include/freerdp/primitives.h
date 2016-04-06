@@ -58,8 +58,8 @@ typedef INT32 pstatus_t;				/* match IppStatus. */
 /* Structures compatible with IPP */
 typedef struct
 {
-	INT32 width;
-	INT32 height;
+	UINT32 width;
+	UINT32 height;
 } prim_size_t;		/* like IppiSize */
 
 /* Function prototypes for all of the supported primitives. */
@@ -74,7 +74,7 @@ typedef pstatus_t (*__copy_8u_t)(
 typedef pstatus_t (*__copy_8u_AC4r_t)(
 	const BYTE *pSrc,
 	INT32 srcStep,	/* bytes */
-	BYTE *pDst,  
+	BYTE *pDst,
 	INT32 dstStep,	/* bytes */
 	INT32 width,  INT32 height);	/* pixels */
 typedef pstatus_t (*__set_8u_t)(
@@ -136,6 +136,14 @@ typedef pstatus_t (*__sign_16s_t)(
 	const INT16 *pSrc,
 	INT16 *pDst,
 	INT32 len);
+typedef pstatus_t (*__yCbCrToRGB_16s8u_P3AC4R_t)(
+	const INT16* pSrc[3], INT32 srcStep,
+	BYTE* pDst, INT32 dstStep,
+	const prim_size_t* roi);
+typedef pstatus_t (*__yCbCrToBGR_16s8u_P3AC4R_t)(
+	const INT16* pSrc[3], INT32 srcStep,
+	BYTE* pDst, INT32 dstStep,
+	const prim_size_t* roi);
 typedef pstatus_t (*__yCbCrToRGB_16s16s_P3P3_t)(
 	const INT16 *pSrc[3],  INT32 srcStep,
 	INT16 *pDst[3],  INT32 dstStep,
@@ -148,6 +156,44 @@ typedef pstatus_t (*__RGBToRGB_16s8u_P3AC4R_t)(
 	const INT16 *pSrc[3],  INT32 srcStep,
 	BYTE *pDst,  INT32 dstStep,
 	const prim_size_t *roi);
+typedef pstatus_t (*__YCoCgToRGB_8u_AC4R_t)(
+	const BYTE *pSrc, INT32 srcStep,
+	BYTE *pDst, INT32 dstStep,
+	UINT32 width, UINT32 height,
+	UINT8 shift,
+	BOOL withAlpha,
+	BOOL invert);
+typedef pstatus_t (*__RGB565ToARGB_16u32u_C3C4_t)(
+	const UINT16* pSrc, INT32 srcStep,
+	UINT32* pDst, INT32 dstStep,
+	UINT32 width, UINT32 height,
+	BOOL alpha, BOOL invert);
+typedef pstatus_t (*__YUV420ToRGB_8u_P3AC4R_t)(
+	const BYTE* pSrc[3], const UINT32 srcStep[3],
+	BYTE* pDst, UINT32 dstStep,
+	const prim_size_t* roi);
+typedef pstatus_t (*__YUV444ToRGB_8u_P3AC4R_t)(
+	const BYTE* pSrc[3], const UINT32 srcStep[3],
+	BYTE* pDst, UINT32 dstStep,
+	const prim_size_t* roi);
+typedef pstatus_t (*__RGBToYUV420_8u_P3AC4R_t)(
+	const BYTE* pSrc, UINT32 srcStep,
+	BYTE* pDst[3], UINT32 dstStep[3],
+	const prim_size_t* roi);
+typedef pstatus_t (*__RGBToYUV444_8u_P3AC4R_t)(
+	const BYTE* pSrc, UINT32 srcStep,
+	BYTE* pDst[3], UINT32 dstStep[3],
+	const prim_size_t* roi);
+typedef pstatus_t (*__YUV420CombineToYUV444_t)(
+		const BYTE* pMainSrc[3], const UINT32 srcMainStep[3],
+		const BYTE* pAuxSrc[3], const UINT32 srcAuxStep[3],
+		BYTE* pDst[3], const UINT32 dstStep[3],
+		const prim_size_t* roi);
+typedef pstatus_t (*__YUV444SplitToYUV420_t)(
+		const BYTE* pSrc[3], const UINT32 srcStep[3],
+		BYTE* pMainDst[3], const UINT32 dstMainStep[3],
+		BYTE* pAuxDst[3], const UINT32 srcAuxStep[3],
+		const prim_size_t* roi);
 typedef pstatus_t (*__andC_32u_t)(
 	const UINT32 *pSrc,
 	UINT32 val,
@@ -187,9 +233,19 @@ typedef struct
 	/* Sign */
 	__sign_16s_t sign_16s;
 	/* Color conversions */
+	__yCbCrToRGB_16s8u_P3AC4R_t yCbCrToRGB_16s8u_P3AC4R;
+	__yCbCrToBGR_16s8u_P3AC4R_t yCbCrToBGR_16s8u_P3AC4R;
 	__yCbCrToRGB_16s16s_P3P3_t yCbCrToRGB_16s16s_P3P3;
 	__RGBToYCbCr_16s16s_P3P3_t RGBToYCbCr_16s16s_P3P3;
 	__RGBToRGB_16s8u_P3AC4R_t RGBToRGB_16s8u_P3AC4R;
+	__YCoCgToRGB_8u_AC4R_t YCoCgToRGB_8u_AC4R;
+	__RGB565ToARGB_16u32u_C3C4_t RGB565ToARGB_16u32u_C3C4;
+	__YUV420ToRGB_8u_P3AC4R_t YUV420ToRGB_8u_P3AC4R;
+	__RGBToYUV420_8u_P3AC4R_t RGBToYUV420_8u_P3AC4R;
+	__RGBToYUV444_8u_P3AC4R_t RGBToYUV444_8u_P3AC4R;
+	__YUV420CombineToYUV444_t YUV420CombineToYUV444;
+	__YUV444SplitToYUV420_t YUV444SplitToYUV420;
+	__YUV420ToRGB_8u_P3AC4R_t YUV444ToRGB_8u_P3AC4R;
 } primitives_t;
 
 #ifdef __cplusplus
