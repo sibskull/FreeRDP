@@ -223,6 +223,9 @@ the RDP protocol.
 rm -f %buildroot%_libdir/*.a \
       %buildroot%_libdir/freerdp/*.a
 
+# workaround, add compat
+ln -s freerdp2.pc %buildroot%_pkgconfigdir/freerdp.pc
+
 %files
 
 %files -n xfreerdp
