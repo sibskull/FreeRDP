@@ -26,9 +26,8 @@ include_directories(${PULSE_INCLUDE_DIR})
 add_channel_client_subsystem_library(${MODULE_PREFIX} ${MODULE_NAME} ${CHANNEL_NAME} "" TRUE "")
 
 
-
-list(APPEND ${MODULE_PREFIX}_LIBS ${PULSE_LIBRARY})
-list(APPEND ${MODULE_PREFIX}_LIBS freerdp)
+set(${MODULE_PREFIX}_LIBS ${${MODULE_PREFIX}_LIBS} winpr freerdp)
+set(${MODULE_PREFIX}_LIBS ${${MODULE_PREFIX}_LIBS} ${PULSE_LIBRARY})
 
 if(GSM_FOUND)
 	list(APPEND ${MODULE_PREFIX}_LIBS ${GSM_LIBRARIES})
