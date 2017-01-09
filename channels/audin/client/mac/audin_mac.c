@@ -33,6 +33,9 @@
 #include <winpr/debug.h>
 #include <winpr/cmdline.h>
 
+#define __COREFOUNDATION_CFPLUGINCOM__ 1
+#define IUNKNOWN_C_GUTS void *_reserved; void* QueryInterface; void* AddRef; void* Release
+
 #include <CoreAudio/CoreAudioTypes.h>
 #include <CoreAudio/CoreAudio.h>
 #include <AudioToolbox/AudioToolbox.h>
@@ -171,7 +174,7 @@ static void mac_audio_queue_input_cb(void *aqData,
 {
     AudinMacDevice* mac = (AudinMacDevice*)aqData;
     UINT error;
-    int encoded_size;
+    int encoded_size = 0;
     const BYTE *encoded_data;
     BYTE *buffer = inBuffer->mAudioData;
     int buffer_size = inBuffer->mAudioDataByteSize;
@@ -212,7 +215,7 @@ static void mac_audio_queue_input_cb(void *aqData,
 
     if ((error = mac->receive(encoded_data, encoded_size, mac->user_data)))
     {
-        WLog_ERR(TAG, "mac->receive failed with error %lu", error);
+        WLog_ERR(TAG, "mac->receive failed with error %"PRIu32"", error);
         SetLastError(ERROR_INTERNAL_ERROR);
         return;
     }
@@ -235,7 +238,7 @@ static UINT audin_mac_close(IAudinDevice *device)
         if (devStat != 0)
         {
             errCode = GetLastError();
-            WLog_ERR(TAG, "AudioQueueStop failed with %s [%d]",
+            WLog_ERR(TAG, "AudioQueueStop failed with %s [%"PRIu32"]",
                      winpr_strerror(errCode, errString, sizeof(errString)), errCode);
         }
         mac->isOpen = false;
@@ -247,7 +250,7 @@ static UINT audin_mac_close(IAudinDevice *device)
         if (devStat != 0)
         {
             errCode = GetLastError();
-            WLog_ERR(TAG, "AudioQueueDispose failed with %s [%d]",
+            WLog_ERR(TAG, "AudioQueueDispose failed with %s [%"PRIu32"]",
                      winpr_strerror(errCode, errString, sizeof(errString)), errCode);
         }
 
@@ -275,7 +278,7 @@ static UINT audin_mac_open(IAudinDevice *device, AudinReceive receive, void *use
     if (devStat != 0)
     {
         errCode = GetLastError();
-        WLog_ERR(TAG, "AudioQueueNewInput failed with %s [%d]",
+        WLog_ERR(TAG, "AudioQueueNewInput failed with %s [%"PRIu32"]",
                  winpr_strerror(errCode, errString, sizeof(errString)), errCode);
         goto err_out;
     }
@@ -287,7 +290,7 @@ static UINT audin_mac_open(IAudinDevice *device, AudinReceive receive, void *use
         if (devStat != 0)
         {
             errCode = GetLastError();
-            WLog_ERR(TAG, "AudioQueueAllocateBuffer failed with %s [%d]",
+            WLog_ERR(TAG, "AudioQueueAllocateBuffer failed with %s [%"PRIu32"]",
                      winpr_strerror(errCode, errString, sizeof(errString)), errCode);
             goto err_out;
         }
@@ -299,7 +302,7 @@ static UINT audin_mac_open(IAudinDevice *device, AudinReceive receive, void *use
         if (devStat != 0)
         {
             errCode = GetLastError();
-            WLog_ERR(TAG, "AudioQueueEnqueueBuffer failed with %s [%d]",
+            WLog_ERR(TAG, "AudioQueueEnqueueBuffer failed with %s [%"PRIu32"]",
                      winpr_strerror(errCode, errString, sizeof(errString)), errCode);
             goto err_out;
         }
@@ -311,7 +314,7 @@ static UINT audin_mac_open(IAudinDevice *device, AudinReceive receive, void *use
     if (devStat != 0)
     {
         errCode = GetLastError();
-        WLog_ERR(TAG, "AudioQueueStart failed with %s [%d]",
+        WLog_ERR(TAG, "AudioQueueStart failed with %s [%"PRIu32"]",
                  winpr_strerror(errCode, errString, sizeof(errString)), errCode);
         goto err_out;
     }
@@ -400,7 +403,7 @@ static UINT audin_mac_parse_addin_args(AudinMacDevice *device, ADDIN_ARGV *args)
     return CHANNEL_RC_OK;
 }
 
-#ifdef STATIC_CHANNELS
+#ifdef BUILTIN_CHANNELS
 #define freerdp_audin_client_subsystem_entry	mac_freerdp_audin_client_subsystem_entry
 #else
 #define freerdp_audin_client_subsystem_entry	FREERDP_API freerdp_audin_client_subsystem_entry
@@ -418,7 +421,7 @@ UINT freerdp_audin_client_subsystem_entry(PFREERDP_AUDIN_DEVICE_ENTRY_POINTS pEn
     if (!mac)
     {
         errCode = GetLastError();
-        WLog_ERR(TAG, "calloc failed with %s [%d]",
+        WLog_ERR(TAG, "calloc failed with %s [%"PRIu32"]",
                  winpr_strerror(errCode, errString, sizeof(errString)), errCode);
         return CHANNEL_RC_NO_MEMORY;
     }
@@ -435,7 +438,7 @@ UINT freerdp_audin_client_subsystem_entry(PFREERDP_AUDIN_DEVICE_ENTRY_POINTS pEn
 
     if ((error = audin_mac_parse_addin_args(mac, args)))
     {
-        WLog_ERR(TAG, "audin_mac_parse_addin_args failed with %lu!", error);
+        WLog_ERR(TAG, "audin_mac_parse_addin_args failed with %"PRIu32"!", error);
         goto error_out;
     }
 
@@ -449,7 +452,7 @@ UINT freerdp_audin_client_subsystem_entry(PFREERDP_AUDIN_DEVICE_ENTRY_POINTS pEn
 
     if ((error = pEntryPoints->pRegisterAudinDevice(pEntryPoints->plugin, (IAudinDevice*) mac)))
     {
-        WLog_ERR(TAG, "RegisterAudinDevice failed with error %lu!", error);
+        WLog_ERR(TAG, "RegisterAudinDevice failed with error %"PRIu32"!", error);
         goto error_out;
     }
 

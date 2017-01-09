@@ -78,9 +78,6 @@ static BOOL _CommDeviceIoControl(HANDLE hDevice, DWORD dwIoControlCode, LPVOID l
 	WINPR_COMM* pComm = (WINPR_COMM*) hDevice;
 	SERIAL_DRIVER* pServerSerialDriver = NULL;
 
-	/* clear any previous last error */
-	SetLastError(ERROR_SUCCESS);
-
 	if (hDevice == INVALID_HANDLE_VALUE)
 	{
 		SetLastError(ERROR_INVALID_HANDLE);
@@ -93,7 +90,7 @@ static BOOL _CommDeviceIoControl(HANDLE hDevice, DWORD dwIoControlCode, LPVOID l
 		return FALSE;
 	}
 
-	if (lpOverlapped != NULL)
+	if (lpOverlapped)
 	{
 		SetLastError(ERROR_NOT_SUPPORTED);
 		return FALSE;
@@ -104,6 +101,9 @@ static BOOL _CommDeviceIoControl(HANDLE hDevice, DWORD dwIoControlCode, LPVOID l
 		SetLastError(ERROR_INVALID_PARAMETER); /* since we doesn't suppport lpOverlapped != NULL */
 		return FALSE;
 	}
+
+	/* clear any previous last error */
+	SetLastError(ERROR_SUCCESS);
 
 	*lpBytesReturned = 0; /* will be ajusted if required ... */
 
@@ -629,7 +629,7 @@ static BOOL _CommDeviceIoControl(HANDLE hDevice, DWORD dwIoControlCode, LPVOID l
 		}
 	}
 
-	CommLog_Print(WLOG_WARN, _T("unsupported IoControlCode=[0x%lX] %s (remote serial driver: %s)"),
+	CommLog_Print(WLOG_WARN, _T("unsupported IoControlCode=[0x%08"PRIX32"] %s (remote serial driver: %s)"),
 		dwIoControlCode, _comm_serial_ioctl_name(dwIoControlCode), pServerSerialDriver->name);
 	SetLastError(ERROR_CALL_NOT_IMPLEMENTED); /* => STATUS_NOT_IMPLEMENTED */
 	return FALSE;
@@ -673,14 +673,14 @@ BOOL CommDeviceIoControl(HANDLE hDevice, DWORD dwIoControlCode, LPVOID lpInBuffe
 	if (lpBytesReturned && *lpBytesReturned != nOutBufferSize)
 	{
 		/* This might be a hint for a bug, especially when result==TRUE */
-		CommLog_Print(WLOG_WARN, "lpBytesReturned=%ld and nOutBufferSize=%ld are different!", *lpBytesReturned, nOutBufferSize);
+		CommLog_Print(WLOG_WARN, "lpBytesReturned=%"PRIu32" and nOutBufferSize=%"PRIu32" are different!", *lpBytesReturned, nOutBufferSize);
 	}
 
 	if (pComm->permissive)
 	{
 		if (!result)
 		{
-			CommLog_Print(WLOG_WARN, "[permissive]: whereas it failed, made to succeed IoControlCode=[0x%lX] %s, last-error: 0x%lX",
+			CommLog_Print(WLOG_WARN, "[permissive]: whereas it failed, made to succeed IoControlCode=[0x%08"PRIX32"] %s, last-error: 0x%08"PRIX32"",
 				dwIoControlCode, _comm_serial_ioctl_name(dwIoControlCode), GetLastError());
 		}
 

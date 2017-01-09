@@ -2,32 +2,41 @@
 #include <winpr/crt.h>
 #include <winpr/error.h>
 #include <winpr/wtsapi.h>
+#include <winpr/environment.h>
 
 int TestWtsApiQuerySessionInformation(int argc, char* argv[])
 {
-	DWORD index;
+	DWORD index, i;
 	DWORD count;
 	BOOL bSuccess;
 	HANDLE hServer;
 	LPSTR pBuffer;
 	DWORD sessionId;
 	DWORD bytesReturned;
-	PWTS_SESSION_INFO pSessionInfo;
+	PWTS_SESSION_INFOA pSessionInfo;
+
+#ifndef _WIN32
+	if (!GetEnvironmentVariableA("WTSAPI_LIBRARY", NULL, 0))
+	{
+		printf("%s: No RDS environment detected, skipping test\n", __FUNCTION__);
+		return 0;
+	}
+#endif
 
 	hServer = WTS_CURRENT_SERVER_HANDLE;
 
 	count = 0;
 	pSessionInfo = NULL;
 
-	bSuccess = WTSEnumerateSessions(hServer, 0, 1, &pSessionInfo, &count);
+	bSuccess = WTSEnumerateSessionsA(hServer, 0, 1, &pSessionInfo, &count);
 
 	if (!bSuccess)
 	{
-		printf("WTSEnumerateSessions failed: %d\n", (int) GetLastError());
+		printf("WTSEnumerateSessions failed: %"PRIu32"\n", GetLastError());
 		return 0;
 	}
 
-	printf("WTSEnumerateSessions count: %d\n", (int) count);
+	printf("WTSEnumerateSessions count: %"PRIu32"\n", count);
 
 	for (index = 0; index < count; index++)
 	{
@@ -47,9 +56,12 @@ int TestWtsApiQuerySessionInformation(int argc, char* argv[])
 
 		sessionId = pSessionInfo[index].SessionId;
 
-		printf("[%d] SessionId: %d State: %d\n", (int) index,
-				(int) pSessionInfo[index].SessionId,
-				(int) pSessionInfo[index].State);
+		printf("[%"PRIu32"] SessionId: %"PRIu32" State: %s (%u) WinstationName: '%s'\n",
+				index,
+				pSessionInfo[index].SessionId,
+				WTSSessionStateToString(pSessionInfo[index].State),
+				pSessionInfo[index].State,
+				pSessionInfo[index].pWinStationName);
 
 		/* WTSUserName */
 
@@ -57,12 +69,12 @@ int TestWtsApiQuerySessionInformation(int argc, char* argv[])
 
 		if (!bSuccess)
 		{
-			printf("WTSQuerySessionInformation WTSUserName failed: %d\n", (int) GetLastError());
+			printf("WTSQuerySessionInformation WTSUserName failed: %"PRIu32"\n", GetLastError());
 			return -1;
 		}
 
 		Username = (char*) pBuffer;
-		printf("\tWTSUserName: %s\n", Username);
+		printf("\tWTSUserName: '%s'\n", Username);
 
 		/* WTSDomainName */
 
@@ -70,12 +82,12 @@ int TestWtsApiQuerySessionInformation(int argc, char* argv[])
 
 		if (!bSuccess)
 		{
-			printf("WTSQuerySessionInformation WTSDomainName failed: %d\n", (int) GetLastError());
+			printf("WTSQuerySessionInformation WTSDomainName failed: %"PRIu32"\n", GetLastError());
 			return -1;
 		}
 
 		Domain = (char*) pBuffer;
-		printf("\tWTSDomainName: %s\n", Domain);
+		printf("\tWTSDomainName: '%s'\n", Domain);
 
 		/* WTSConnectState */
 
@@ -83,12 +95,12 @@ int TestWtsApiQuerySessionInformation(int argc, char* argv[])
 
 		if (!bSuccess)
 		{
-			printf("WTSQuerySessionInformation WTSConnectState failed: %d\n", (int) GetLastError());
+			printf("WTSQuerySessionInformation WTSConnectState failed: %"PRIu32"\n", GetLastError());
 			return -1;
 		}
 
 		ConnectState = *((WTS_CONNECTSTATE_CLASS*) pBuffer);
-		printf("\tWTSConnectState: %d\n", (int) ConnectState);
+		printf("\tWTSConnectState: %u (%s)\n", ConnectState, WTSSessionStateToString(ConnectState));
 
 		/* WTSClientBuildNumber */
 
@@ -96,12 +108,12 @@ int TestWtsApiQuerySessionInformation(int argc, char* argv[])
 
 		if (!bSuccess)
 		{
-			printf("WTSQuerySessionInformation WTSClientBuildNumber failed: %d\n", (int) GetLastError());
+			printf("WTSQuerySessionInformation WTSClientBuildNumber failed: %"PRIu32"\n", GetLastError());
 			return -1;
 		}
 
 		ClientBuildNumber = *((ULONG*) pBuffer);
-		printf("\tWTSClientBuildNumber: %d\n", (int) ClientBuildNumber);
+		printf("\tWTSClientBuildNumber: %"PRIu32"\n", ClientBuildNumber);
 
 		/* WTSClientName */
 
@@ -109,12 +121,12 @@ int TestWtsApiQuerySessionInformation(int argc, char* argv[])
 
 		if (!bSuccess)
 		{
-			printf("WTSQuerySessionInformation WTSClientName failed: %d\n", (int) GetLastError());
+			printf("WTSQuerySessionInformation WTSClientName failed: %"PRIu32"\n", GetLastError());
 			return -1;
 		}
 
 		ClientName = (char*) pBuffer;
-		printf("\tWTSClientName: %s\n", ClientName);
+		printf("\tWTSClientName: '%s'\n", ClientName);
 
 		/* WTSClientProductId */
 
@@ -122,12 +134,12 @@ int TestWtsApiQuerySessionInformation(int argc, char* argv[])
 
 		if (!bSuccess)
 		{
-			printf("WTSQuerySessionInformation WTSClientProductId failed: %d\n", (int) GetLastError());
+			printf("WTSQuerySessionInformation WTSClientProductId failed: %"PRIu32"\n", GetLastError());
 			return -1;
 		}
 
 		ClientProductId = *((USHORT*) pBuffer);
-		printf("\tWTSClientProductId: %d\n", (int) ClientProductId);
+		printf("\tWTSClientProductId: %"PRIu16"\n", ClientProductId);
 
 		/* WTSClientHardwareId */
 
@@ -135,12 +147,12 @@ int TestWtsApiQuerySessionInformation(int argc, char* argv[])
 
 		if (!bSuccess)
 		{
-			printf("WTSQuerySessionInformation WTSClientHardwareId failed: %d\n", (int) GetLastError());
+			printf("WTSQuerySessionInformation WTSClientHardwareId failed: %"PRIu32"\n", GetLastError());
 			return -1;
 		}
 
 		ClientHardwareId = *((ULONG*) pBuffer);
-		printf("\tWTSClientHardwareId: %d\n", (int) ClientHardwareId);
+		printf("\tWTSClientHardwareId: %"PRIu32"\n", ClientHardwareId);
 
 		/* WTSClientAddress */
 
@@ -148,13 +160,17 @@ int TestWtsApiQuerySessionInformation(int argc, char* argv[])
 
 		if (!bSuccess)
 		{
-			printf("WTSQuerySessionInformation WTSClientAddress failed: %d\n", (int) GetLastError());
+			printf("WTSQuerySessionInformation WTSClientAddress failed: %"PRIu32"\n", GetLastError());
 			return -1;
 		}
 
 		ClientAddress = (PWTS_CLIENT_ADDRESS) pBuffer;
-		printf("\tWTSClientAddress: AddressFamily: %d\n",
-				(int) ClientAddress->AddressFamily);
+		printf("\tWTSClientAddress: AddressFamily: %"PRIu32" Address: ",
+				ClientAddress->AddressFamily);
+		for (i = 0; i < sizeof(ClientAddress->Address); i++)
+			printf("%02"PRIX8"", ClientAddress->Address[i]);
+		printf("\n");
+
 
 		/* WTSClientDisplay */
 
@@ -162,14 +178,14 @@ int TestWtsApiQuerySessionInformation(int argc, char* argv[])
 
 		if (!bSuccess)
 		{
-			printf("WTSQuerySessionInformation WTSClientDisplay failed: %d\n", (int) GetLastError());
+			printf("WTSQuerySessionInformation WTSClientDisplay failed: %"PRIu32"\n", GetLastError());
 			return -1;
 		}
 
 		ClientDisplay = (PWTS_CLIENT_DISPLAY) pBuffer;
-		printf("\tWTSClientDisplay: HorizontalResolution: %d VerticalResolution: %d ColorDepth: %d\n",
-				(int) ClientDisplay->HorizontalResolution, (int) ClientDisplay->VerticalResolution,
-				(int) ClientDisplay->ColorDepth);
+		printf("\tWTSClientDisplay: HorizontalResolution: %"PRIu32" VerticalResolution: %"PRIu32" ColorDepth: %"PRIu32"\n",
+				ClientDisplay->HorizontalResolution, ClientDisplay->VerticalResolution,
+				ClientDisplay->ColorDepth);
 
 		/* WTSClientProtocolType */
 
@@ -177,12 +193,12 @@ int TestWtsApiQuerySessionInformation(int argc, char* argv[])
 
 		if (!bSuccess)
 		{
-			printf("WTSQuerySessionInformation WTSClientProtocolType failed: %d\n", (int) GetLastError());
+			printf("WTSQuerySessionInformation WTSClientProtocolType failed: %"PRIu32"\n", GetLastError());
 			return -1;
 		}
 
 		ClientProtocolType = *((USHORT*) pBuffer);
-		printf("\tWTSClientProtocolType: %d\n", (int) ClientProtocolType);
+		printf("\tWTSClientProtocolType: %"PRIu16"\n", ClientProtocolType);
 	}
 
 	WTSFreeMemory(pSessionInfo);

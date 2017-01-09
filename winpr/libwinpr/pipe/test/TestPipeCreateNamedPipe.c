@@ -76,7 +76,7 @@ static void* named_pipe_client_thread(void* arg)
 		goto out;
 	}
 
-	printf("Client ReadFile (%d):\n", lpNumberOfBytesRead);
+	printf("Client ReadFile: %"PRIu32" bytes\n", lpNumberOfBytesRead);
 	winpr_HexDump("pipe.test", WLOG_DEBUG, lpReadBuffer, lpNumberOfBytesRead);
 	fSuccess = TRUE;
 out:
@@ -118,10 +118,16 @@ static void* named_pipe_server_thread(void* arg)
 	}
 
 	SetEvent(ReadyEvent);
-	fConnected = ConnectNamedPipe(hNamedPipe, NULL);
 
-	if (!fConnected)
-		fConnected = (GetLastError() == ERROR_PIPE_CONNECTED);
+	/**
+	 * Note:
+	 * If a client connects before ConnectNamedPipe is called, the function returns zero and
+	 * GetLastError returns ERROR_PIPE_CONNECTED. This can happen if a client connects in the
+	 * interval between the call to CreateNamedPipe and the call to ConnectNamedPipe.
+	 * In this situation, there is a good connection between client and server, even though
+	 * the function returns zero.
+	 */
+	fConnected = ConnectNamedPipe(hNamedPipe, NULL) ? TRUE : (GetLastError() == ERROR_PIPE_CONNECTED);
 
 	if (!fConnected)
 	{
@@ -151,7 +157,7 @@ static void* named_pipe_server_thread(void* arg)
 		goto out;
 	}
 
-	printf("Server ReadFile (%d):\n", lpNumberOfBytesRead);
+	printf("Server ReadFile: %"PRIu32" bytes\n", lpNumberOfBytesRead);
 	winpr_HexDump("pipe.test", WLOG_DEBUG, lpReadBuffer, lpNumberOfBytesRead);
 	lpNumberOfBytesWritten = 0;
 	nNumberOfBytesToWrite = PIPE_BUFFER_SIZE;
@@ -246,6 +252,7 @@ static void* named_pipe_single_thread(void* arg)
 
 	for (i = 0; i < numPipes; i++)
 	{
+		BOOL fConnected;
 		if ((clients[i] = CreateFile(lpszPipeNameSt, GENERIC_READ | GENERIC_WRITE,
 									  0, NULL, OPEN_EXISTING, 0, NULL)) == INVALID_HANDLE_VALUE)
 		{
@@ -253,9 +260,19 @@ static void* named_pipe_single_thread(void* arg)
 			goto out;
 		}
 
-		if (!ConnectNamedPipe(servers[i], NULL))
+		/**
+		 * Note:
+		 * If a client connects before ConnectNamedPipe is called, the function returns zero and
+		 * GetLastError returns ERROR_PIPE_CONNECTED. This can happen if a client connects in the
+		 * interval between the call to CreateNamedPipe and the call to ConnectNamedPipe.
+		 * In this situation, there is a good connection between client and server, even though
+		 * the function returns zero.
+		 */
+		fConnected = ConnectNamedPipe(servers[i], NULL) ? TRUE : (GetLastError() == ERROR_PIPE_CONNECTED);
+
+		if (!fConnected)
 		{
-			printf("%s: ConnectNamedPipe #%d failed\n", __FUNCTION__, i);
+			printf("%s: ConnectNamedPipe #%d failed. (%"PRIu32")\n", __FUNCTION__, i, GetLastError());
 			goto out;
 		}
 	}
@@ -429,27 +446,38 @@ int TestPipeCreateNamedPipe(int argc, char* argv[])
 	HANDLE SingleThread;
 	HANDLE ClientThread;
 	HANDLE ServerThread;
+	HANDLE hPipe;
+
+	/* Verify that CreateNamedPipe returns INVALID_HANDLE_VALUE on failure */
+	hPipe = CreateNamedPipeA(NULL, 0, 0, 0, 0, 0, 0, NULL);
+	if (hPipe != INVALID_HANDLE_VALUE)
+	{
+		printf("CreateNamedPipe unexpectedly returned %p instead of INVALID_HANDLE_VALUE (%p)\n",
+			hPipe, INVALID_HANDLE_VALUE);
+		return -1;
+	}
+
 #ifndef _WIN32
 	signal(SIGPIPE, SIG_IGN);
 #endif
 	if (!(ReadyEvent = CreateEvent(NULL, TRUE, FALSE, NULL)))
 	{
-		printf("CreateEvent failure: (%d)\n", GetLastError());
+		printf("CreateEvent failure: (%"PRIu32")\n", GetLastError());
 		return -1;
 	}
 	if (!(SingleThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) named_pipe_single_thread, NULL, 0, NULL)))
 	{
-		printf("CreateThread (SingleThread) failure: (%d)\n", GetLastError());
+		printf("CreateThread (SingleThread) failure: (%"PRIu32")\n", GetLastError());
 		return -1;
 	}
 	if (!(ClientThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) named_pipe_client_thread, NULL, 0, NULL)))
 	{
-		printf("CreateThread (ClientThread) failure: (%d)\n", GetLastError());
+		printf("CreateThread (ClientThread) failure: (%"PRIu32")\n", GetLastError());
 		return -1;
 	}
 	if (!(ServerThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE) named_pipe_server_thread, NULL, 0, NULL)))
 	{
-		printf("CreateThread (ServerThread) failure: (%d)\n", GetLastError());
+		printf("CreateThread (ServerThread) failure: (%"PRIu32")\n", GetLastError());
 		return -1;
 	}
 	WaitForSingleObject(SingleThread, INFINITE);
@@ -460,4 +488,3 @@ int TestPipeCreateNamedPipe(int argc, char* argv[])
 	CloseHandle(ServerThread);
 	return testFailed;
 }
-

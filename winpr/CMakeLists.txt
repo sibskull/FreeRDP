@@ -58,9 +58,11 @@ set(WINPR_API_VERSION "${WINPR_VERSION_MAJOR}")
 if(NOT IOS)
 	check_include_files(stdbool.h WINPR_HAVE_STDBOOL_H)
 	check_include_files(stdint.h WINPR_HAVE_STDINT_H)
+	check_include_files(inttypes.h WINPR_HAVE_INTTYPES_H)
 else(NOT IOS)
 	set(WINPR_HAVE_STDBOOL_H 1)
 	set(WINPR_HAVE_STDINT_H 1)
+	set(WINPR_HAVE_INTTYPES_H 1)
 endif(NOT IOS)
 
 if(FREERDP_BUILD)
@@ -70,7 +72,7 @@ if(FREERDP_BUILD)
 else()
 	set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
 
-	if(NOT IOS AND NOT ANDROID)
+	if(NOT IOS)
 		find_package(Threads REQUIRED)
 	endif()
 
@@ -99,7 +101,17 @@ else()
 	endif()
 
 	if(NOT WIN32)
-		check_library_exists(pthread pthread_mutex_timedlock "" HAVE_PTHREAD_MUTEX_TIMEDLOCK)
+		CHECK_SYMBOL_EXISTS(pthread_mutex_timedlock pthread.h HAVE_PTHREAD_MUTEX_TIMEDLOCK_SYMBOL)
+		if (NOT HAVE_PTHREAD_MUTEX_TIMEDLOCK_SYMBOL)
+			CHECK_LIBRARY_EXISTS(pthread pthread_mutex_timedlock "" HAVE_PTHREAD_MUTEX_TIMEDLOCK_LIB)
+		endif (NOT HAVE_PTHREAD_MUTEX_TIMEDLOCK_SYMBOL)
+		if (NOT HAVE_PTHREAD_MUTEX_TIMEDLOCK_LIB)
+			CHECK_LIBRARY_EXISTS(pthreads pthread_mutex_timedlock "" HAVE_PTHREAD_MUTEX_TIMEDLOCK_LIBS)
+		endif (NOT HAVE_PTHREAD_MUTEX_TIMEDLOCK_LIB)
+
+		if (HAVE_PTHREAD_MUTEX_TIMEDLOCK_SYMBOL OR HAVE_PTHREAD_MUTEX_TIMEDLOCK_LIB OR HAVE_PTHREAD_MUTEX_TIMEDLOCK_LIBS)
+			set(HAVE_PTHREAD_MUTEX_TIMEDLOCK ON)
+		endif (HAVE_PTHREAD_MUTEX_TIMEDLOCK_SYMBOL OR HAVE_PTHREAD_MUTEX_TIMEDLOCK_LIB OR HAVE_PTHREAD_MUTEX_TIMEDLOCK_LIBS)
 	endif()
 
 	set(OPENSSL_FEATURE_TYPE "OPTIONAL")
@@ -156,13 +168,21 @@ add_subdirectory(include)
 
 add_subdirectory(libwinpr)
 
-if(NOT ANDROID AND NOT IOS)
+if(NOT ANDROID AND NOT IOS AND NOT UWP)
 	add_subdirectory(tools)
 endif()
 
 if(BUILD_TESTING)
 	add_subdirectory(test)
 endif()
+
+if(WITH_MANPAGES)
+	if(OPENBSD)
+	    install(FILES wlog.7 DESTINATION man/man7)
+	else()
+	    install(FILES wlog.7 DESTINATION ${CMAKE_INSTALL_DATAROOTDIR}/man/man7)
+	endif()
+endif(WITH_MANPAGES)
 
 # Exporting
 

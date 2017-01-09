@@ -400,7 +400,7 @@ out_parallel_name_error:
 
 	}
 
-	WLog_ERR(TAG, "unknown device type %d", device->Type);
+	WLog_ERR(TAG, "unknown device type %"PRIu32"", device->Type);
 	return NULL;
 }
 
@@ -903,6 +903,9 @@ BOOL freerdp_get_param_bool(rdpSettings* settings, int id)
 		case FreeRDP_AuthenticationLevel:
 			return settings->AuthenticationLevel;
 
+		case FreeRDP_VmConnectMode:
+			return settings->VmConnectMode;
+
 		case FreeRDP_MstscCookieMode:
 			return settings->MstscCookieMode;
 
@@ -911,6 +914,9 @@ BOOL freerdp_get_param_bool(rdpSettings* settings, int id)
 
 		case FreeRDP_IgnoreCertificate:
 			return settings->IgnoreCertificate;
+
+		case FreeRDP_AutoAcceptCertificate:
+			return settings->AutoAcceptCertificate;
 
 		case FreeRDP_ExternalCertificateManagement:
 			return settings->ExternalCertificateManagement;
@@ -1351,6 +1357,10 @@ int freerdp_set_param_bool(rdpSettings* settings, int id, BOOL param)
 			settings->AuthenticationLevel = param;
 			break;
 
+		case FreeRDP_VmConnectMode:
+			settings->VmConnectMode = param;
+			break;
+
 		case FreeRDP_MstscCookieMode:
 			settings->MstscCookieMode = param;
 			break;
@@ -1361,6 +1371,10 @@ int freerdp_set_param_bool(rdpSettings* settings, int id, BOOL param)
 
 		case FreeRDP_IgnoreCertificate:
 			settings->IgnoreCertificate = param;
+			break;
+
+		case FreeRDP_AutoAcceptCertificate:
+			settings->AutoAcceptCertificate = param;
 			break;
 
 		case FreeRDP_ExternalCertificateManagement:
@@ -1664,7 +1678,7 @@ int freerdp_set_param_bool(rdpSettings* settings, int id, BOOL param)
 			break;
 
 		default:
-			WLog_ERR(TAG,  "freerdp_set_param_bool: unknown id %d (param = %d)", id, param);
+			WLog_ERR(TAG,  "freerdp_set_param_bool: unknown id %d (param = %"PRId32")", id, param);
 			return -1;
 	}
 
@@ -2287,7 +2301,7 @@ int freerdp_set_param_uint32(rdpSettings* settings, int id, UINT32 param)
 			break;
 
 		default:
-			WLog_ERR(TAG, "freerdp_set_param_uint32: unknown id %d (param = %u)", id, param);
+			WLog_ERR(TAG, "freerdp_set_param_uint32: unknown id %d (param = %"PRIu32")", id, param);
 			return -1;
 	}
 
@@ -2319,7 +2333,7 @@ int freerdp_set_param_uint64(rdpSettings* settings, int id, UINT64 param)
 			break;
 
 		default:
-			WLog_ERR(TAG,  "freerdp_set_param_uint64: unknown id %d (param = %u)", id, (UINT32) param);
+			WLog_ERR(TAG,  "freerdp_set_param_uint64: unknown id %d (param = %"PRIu64")", id, param);
 			return -1;
 	}
 
@@ -2383,6 +2397,12 @@ char* freerdp_get_param_string(rdpSettings* settings, int id)
 
 		case FreeRDP_AuthenticationServiceClass:
 			return settings->AuthenticationServiceClass;
+
+		case FreeRDP_AllowedTlsCiphers:
+			return settings->AllowedTlsCiphers;
+
+		case FreeRDP_NtlmSamFile:
+			return settings->NtlmSamFile;
 
 		case FreeRDP_PreconnectionBlob:
 			return settings->PreconnectionBlob;
@@ -2558,6 +2578,14 @@ int freerdp_set_param_string(rdpSettings* settings, int id, const char* param)
 
 		case FreeRDP_AuthenticationServiceClass:
 			tmp = &settings->AuthenticationServiceClass;
+			break;
+
+		case FreeRDP_AllowedTlsCiphers:
+			tmp = &settings->AllowedTlsCiphers;
+			break;
+
+		case FreeRDP_NtlmSamFile:
+			tmp = &settings->NtlmSamFile;
 			break;
 
 		case FreeRDP_PreconnectionBlob:

@@ -390,7 +390,7 @@ static IUDEVICE* udevman_get_udevice_by_UsbDevice(IUDEVMAN* idevman, UINT32 UsbD
 		return (IUDEVICE*) pdev;
 	}
 
-	WLog_ERR(TAG, "0x%x ERROR!!", UsbDevice);
+	WLog_ERR(TAG, "0x%"PRIx32" ERROR!!", UsbDevice);
 	return NULL;
 }
 
@@ -577,7 +577,7 @@ static void urbdrc_udevman_parse_addin_args(UDEVMAN* udevman, ADDIN_ARGV* args)
 	while ((arg = CommandLineFindNextArgumentA(arg)) != NULL);
 }
 
-#ifdef STATIC_CHANNELS
+#ifdef BUILTIN_CHANNELS
 #define freerdp_urbdrc_client_subsystem_entry	libusb_freerdp_urbdrc_client_subsystem_entry
 #else
 #define freerdp_urbdrc_client_subsystem_entry	FREERDP_API freerdp_urbdrc_client_subsystem_entry

@@ -28,7 +28,7 @@
 
 #include "../sspi.h"
 #include "../log.h"
-#define TAG WINPR_TAG("negociate")
+#define TAG WINPR_TAG("negotiate")
 
 extern const SecurityFunctionTableA NTLM_SecurityFunctionTableA;
 extern const SecurityFunctionTableW NTLM_SecurityFunctionTableW;
@@ -142,7 +142,7 @@ SECURITY_STATUS SEC_ENTRY negotiate_AcceptSecurityContext(PCredHandle phCredenti
 
 	if (status != SEC_E_OK)
 	{
-		WLog_WARN(TAG, "AcceptSecurityContext status %s [%08X]",
+		WLog_WARN(TAG, "AcceptSecurityContext status %s [0x%08"PRIX32"]",
 			  GetSecurityStatusString(status), status);
 	}
 	return status;

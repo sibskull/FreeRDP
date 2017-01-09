@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <winpr/crt.h>
 #include <winpr/path.h>
@@ -18,31 +17,31 @@ int TestPathCchFindExtension(int argc, char* argv[])
 	hr = PathCchFindExtensionA(NULL, sizeof(testPathExtension), &pszExt);
 	if (SUCCEEDED(hr))
 	{
-		printf("PathCchFindExtensionA unexpectedly succeeded with pszPath = NULL. result: 0x%08X\n", (ULONG)hr);
+		printf("PathCchFindExtensionA unexpectedly succeeded with pszPath = NULL. result: 0x%08"PRIX32"\n", hr);
 		return -1;
 	}
 
 	hr = PathCchFindExtensionA(testPathExtension, 0, &pszExt);
 	if (SUCCEEDED(hr))
 	{
-		printf("PathCchFindExtensionA unexpectedly succeeded with cchPath = 0. result: 0x%08X\n", (ULONG)hr);
+		printf("PathCchFindExtensionA unexpectedly succeeded with cchPath = 0. result: 0x%08"PRIX32"\n", hr);
 		return -1;
 	}
 
 	hr = PathCchFindExtensionA(testPathExtension, sizeof(testPathExtension), NULL);
 	if (SUCCEEDED(hr))
 	{
-		printf("PathCchFindExtensionA unexpectedly succeeded with ppszExt = NULL. result: 0x%08X\n", (ULONG)hr);
+		printf("PathCchFindExtensionA unexpectedly succeeded with ppszExt = NULL. result: 0x%08"PRIX32"\n", hr);
 		return -1;
 	}
 
 
 	/* Test missing null-termination of pszPath */
 
-	hr = PathCchFindExtensionA(_T("c:\\456.789"), 9, &pszExt);
+	hr = PathCchFindExtensionA("c:\\45.789", 9, &pszExt); /* nb: correct would be 10 */
 	if (SUCCEEDED(hr))
 	{
-		printf("PathCchFindExtensionA unexpectedly succeeded with unterminated pszPath. result: 0x%08X\n", (ULONG)hr);
+		printf("PathCchFindExtensionA unexpectedly succeeded with unterminated pszPath. result: 0x%08"PRIX32"\n", hr);
 		return -1;
 	}
 
@@ -50,11 +49,11 @@ int TestPathCchFindExtension(int argc, char* argv[])
 	/* Test passing of an empty terminated string (must succeed) */
 
 	pszExt = NULL;
-	pszTmp = _T("");
+	pszTmp = "";
 	hr = PathCchFindExtensionA(pszTmp, 1, &pszExt);
 	if (hr != S_OK)
 	{
-		printf("PathCchFindExtensionA failed with an empty terminated string. result: 0x%08X\n", (ULONG)hr);
+		printf("PathCchFindExtensionA failed with an empty terminated string. result: 0x%08"PRIX32"\n", hr);
 		return -1;
 	}
 	/* pszExt must point to the strings terminating 0 now */
@@ -68,11 +67,11 @@ int TestPathCchFindExtension(int argc, char* argv[])
 	/* Test a path without file extension (must succeed) */
 
 	pszExt = NULL;
-	pszTmp = _T("c:\\4.678\\");
+	pszTmp = "c:\\4.678\\";
 	hr = PathCchFindExtensionA(pszTmp, 10, &pszExt);
 	if (hr != S_OK)
 	{
-		printf("PathCchFindExtensionA failed with a directory path. result: 0x%08X\n", (ULONG)hr);
+		printf("PathCchFindExtensionA failed with a directory path. result: 0x%08"PRIX32"\n", hr);
 		return -1;
 	}
 	/* The extension must not have been found and pszExt must point to the
@@ -93,7 +92,7 @@ int TestPathCchFindExtension(int argc, char* argv[])
 		return -1;
 	}
 
-	if (!pszExt || _tcscmp(pszExt, _T(".exe")))
+	if (!pszExt || strcmp(pszExt, ".exe"))
 	{
 		printf("PathCchFindExtensionA failure: unexpected extension\n");
 		return -1;

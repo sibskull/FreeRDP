@@ -53,7 +53,7 @@ static BOOL WLog_BinaryAppender_Open(wLog* log, wLogAppender* appender)
 		binaryAppender->FileName = (char*) malloc(MAX_PATH);
 		if (!binaryAppender->FileName)
 			return FALSE;
-		sprintf_s(binaryAppender->FileName, MAX_PATH, "%u.wlog", (unsigned int) GetCurrentProcessId());
+		sprintf_s(binaryAppender->FileName, MAX_PATH, "%"PRIu32".wlog", GetCurrentProcessId());
 	}
 
 	if (!binaryAppender->FilePath)
@@ -124,9 +124,9 @@ static BOOL WLog_BinaryAppender_WriteMessage(wLog* log, wLogAppender* appender, 
 	if (!fp)
 		return FALSE;
 
-	FileNameLength = strlen(message->FileName);
-	FunctionNameLength = strlen(message->FunctionName);
-	TextStringLength = strlen(message->TextString);
+	FileNameLength = (int) strlen(message->FileName);
+	FunctionNameLength = (int) strlen(message->FunctionName);
+	TextStringLength = (int) strlen(message->TextString);
 
 	MessageLength = 16 +
 			(4 + FileNameLength + 1) +
