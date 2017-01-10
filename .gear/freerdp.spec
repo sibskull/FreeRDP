@@ -122,22 +122,6 @@ Requires: libwinpr = %EVR
 The libwinpr-devel package contains libraries and header files for
 developing applications that use libwinpr.
 
-%package -n librdtk
-Summary: Remote Desktop Toolkit library
-Group: System/Libraries
-
-%description -n librdtk
-Remote Desktop Toolkit library. Contains the librtk libraries.
-
-%package -n librdtk-devel
-Summary: Remote Desktop Toolkit librdtk development files
-Group: Development/C
-Requires: librdtk = %EVR
-
-%description -n librdtk-devel
-The librdtk-devel package contains libraries and header files for
-developing applications that use librdtk.
-
 %package -n libuwac
 Summary: Use wayland as a client
 Group: System/Libraries
@@ -264,7 +248,6 @@ ln -s freerdp2.pc %buildroot%_pkgconfigdir/freerdp.pc
 %_libdir/lib%{name}.so.*
 %_libdir/lib%{name}-client.so.*
 %_libdir/lib%{name}-shadow.so.*
-%_libdir/libx%{name}-client.so.*
 %dir %_libdir/freerdp*
 %_man7dir/wlog*
 
@@ -277,21 +260,14 @@ ln -s freerdp2.pc %buildroot%_pkgconfigdir/freerdp.pc
 
 %files -n libwinpr
 %_libdir/libwinpr.so.*
+%_libdir/libwinpr-tools.so.*
 
 %files -n libwinpr-devel
 %_libdir/cmake/WinPR*
 %_includedir/winpr*
 %_libdir/libwinpr.so
+%_libdir/libwinpr-tools.so
 %_pkgconfigdir/winpr*.pc
-
-%files -n librdtk
-%_libdir/librdtk.so.*
-
-%files -n librdtk-devel
-%_libdir/cmake/RdTk*
-%_includedir/rdtk*
-%_libdir/librdtk.so
-%_pkgconfigdir/rdtk*.pc
 
 %files -n libuwac
 %_libdir/libuwac.so.*
@@ -306,7 +282,6 @@ ln -s freerdp2.pc %buildroot%_pkgconfigdir/freerdp.pc
 %_libdir/cmake/FreeRDP*
 %_includedir/%{name}*
 %_libdir/lib%{name}*.so
-%_libdir/libx%{name}*.so
 %_pkgconfigdir/freerdp*.pc
 
 %changelog
