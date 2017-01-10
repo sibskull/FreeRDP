@@ -22,7 +22,7 @@ BuildRequires: cmake gcc-c++
 BuildRequires: docbook-style-xsl git-core xmlto libpcre-devel
 BuildRequires: pkgconfig(alsa)
 BuildRequires: pkgconfig(libpcsclite)
-BuildRequires: pkgconfig(libsystemd-journal)
+BuildRequires: pkgconfig(libsystemd)
 BuildRequires: pkgconfig(openssl)
 BuildRequires: pkgconfig(wayland-client)
 BuildRequires: pkgconfig(wayland-scanner)
