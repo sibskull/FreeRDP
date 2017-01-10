@@ -4,7 +4,7 @@
 
 Name: freerdp
 Version: 2.0.0
-Release: alt0.git20160411
+Release: alt0.git20170109
 
 Group: Networking/Remote access
 Summary: Remote Desktop Protocol functionality
@@ -194,7 +194,7 @@ the RDP protocol.
     -DCMAKE_SKIP_RPATH=ON \
     -DWITH_ALSA=ON \
     -DWITH_CUPS=ON \
-    -DWITH_CHANNELS=ON -DSTATIC_CHANNELS=OFF \
+    -DWITH_CHANNELS=ON -DBUILTIN_CHANNELS=OFF \
     -DWITH_CLIENT=ON \
     %{?_without_directfb:-DWITH_DIRECTFB=OFF} \
     %{?_without_ffmpeg:-DWITH_FFMPEG=OFF} \
@@ -246,6 +246,7 @@ ln -s freerdp2.pc %buildroot%_pkgconfigdir/freerdp.pc
 %files -n xfreerdp
 %_bindir/xfreerdp
 %_man1dir/xfreerdp*
+%_bindir/winpr-*
 
 %files -n wlfreerdp
 %_bindir/wlfreerdp
@@ -256,7 +257,6 @@ ln -s freerdp2.pc %buildroot%_pkgconfigdir/freerdp.pc
 %endif
 
 %files server
-%_bindir/winpr-*
 %_bindir/freerdp-shadow-cli
 
 %files -n lib%name
@@ -266,6 +266,7 @@ ln -s freerdp2.pc %buildroot%_pkgconfigdir/freerdp.pc
 %_libdir/lib%{name}-shadow.so.*
 %_libdir/libx%{name}-client.so.*
 %dir %_libdir/freerdp*
+%_man7dir/wlog*
 
 %files -n lib%name-server
 %_libdir/lib%{name}-server.so.*
@@ -309,6 +310,9 @@ ln -s freerdp2.pc %buildroot%_pkgconfigdir/freerdp.pc
 %_pkgconfigdir/freerdp*.pc
 
 %changelog
+* Tue Jan 10 2017 Alexey Shabalin <shaba@altlinux.ru> 2.0.0-alt0.git20170109
+- upstream git snapshot 8fd926f08524bcdad8adbb5d908ebb1ad2ce6106
+
 * Tue Apr 12 2016 Alexey Shabalin <shaba@altlinux.ru> 2.0.0-alt0.git20160411
 - upstream git snapshot 11d113872fe254a2472e99a40f8be7237d5a82d3
 
