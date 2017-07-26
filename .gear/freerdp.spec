@@ -44,6 +44,7 @@ BuildRequires: pkgconfig(libpulse)
 BuildRequires: libcups-devel libjpeg-devel zlib-devel
 %{?_with_ffmpeg:BuildRequires: libavcodec-devel libavutil-devel}
 %{?_with_x264:BuildRequires: libx264-devel}
+BuildRequires: libkrb5-devel
 
 %description
 freerdp implements Remote Desktop Protocol (RDP), used in a number of Microsoft
