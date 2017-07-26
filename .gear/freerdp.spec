@@ -4,7 +4,7 @@
 
 Name: freerdp
 Version: 2.0.0
-Release: alt0.git20170109.2
+Release: alt0.git20170724
 
 Group: Networking/Remote access
 Summary: Remote Desktop Protocol functionality
@@ -285,6 +285,9 @@ ln -s freerdp2.pc %buildroot%_pkgconfigdir/freerdp.pc
 %_pkgconfigdir/freerdp*.pc
 
 %changelog
+* Wed Jul 26 2017 Alexey Shabalin <shaba@altlinux.ru> 2.0.0-alt0.git20170724
+- First release candidate for 2.0.0
+
 * Wed Jan 11 2017 Alexey Shabalin <shaba@altlinux.ru> 2.0.0-alt0.git20170109.2
 - move libfreerdp-shadow.so.* to libfreerdp-server package
 
