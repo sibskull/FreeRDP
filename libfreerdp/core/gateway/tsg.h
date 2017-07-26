@@ -19,8 +19,8 @@
  * limitations under the License.
  */
 
-#ifndef FREERDP_CORE_TSG_H
-#define FREERDP_CORE_TSG_H
+#ifndef FREERDP_LIB_CORE_GATEWAY_TSG_H
+#define FREERDP_LIB_CORE_GATEWAY_TSG_H
 
 typedef struct rdp_tsg rdpTsg;
 
@@ -321,9 +321,6 @@ FREERDP_LOCAL BOOL tsg_connect(rdpTsg* tsg, const char* hostname, UINT16 port,
                                int timeout);
 FREERDP_LOCAL BOOL tsg_disconnect(rdpTsg* tsg);
 
-FREERDP_LOCAL int tsg_write(rdpTsg* tsg, BYTE* data, UINT32 length);
-FREERDP_LOCAL int tsg_read(rdpTsg* tsg, BYTE* data, UINT32 length);
-
 FREERDP_LOCAL int tsg_recv_pdu(rdpTsg* tsg, RPC_PDU* pdu);
 
 FREERDP_LOCAL int tsg_check_event_handles(rdpTsg* tsg);
@@ -335,4 +332,4 @@ FREERDP_LOCAL void tsg_free(rdpTsg* tsg);
 
 FREERDP_LOCAL BIO_METHOD* BIO_s_tsg(void);
 
-#endif /* FREERDP_CORE_TSG_H */
+#endif /* FREERDP_LIB_CORE_GATEWAY_TSG_H */

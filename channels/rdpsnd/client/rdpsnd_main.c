@@ -223,8 +223,9 @@ static void rdpsnd_select_supported_audio_formats(rdpsndPlugin* rdpsnd)
 	if (!rdpsnd->NumberOfServerFormats)
 		return;
 
-	rdpsnd->ClientFormats = (AUDIO_FORMAT*) calloc(sizeof(AUDIO_FORMAT),
-	                        rdpsnd->NumberOfServerFormats);
+	rdpsnd->ClientFormats = (AUDIO_FORMAT*) calloc(
+	                        rdpsnd->NumberOfServerFormats,
+				sizeof(AUDIO_FORMAT));
 
 	if (!rdpsnd->ClientFormats)
 		return;
@@ -1442,13 +1443,7 @@ static VOID VCAPITYPE rdpsnd_virtual_channel_init_event_ex(LPVOID lpUserParam, L
 			break;
 
 		case CHANNEL_EVENT_TERMINATED:
-			if (plugin->thread != NULL)
-				if ((error = rdpsnd_virtual_channel_event_disconnected(plugin)))
-					WLog_ERR(TAG,
-					         "rdpsnd_virtual_channel_event_disconnected failed with error %"PRIu32"!", error);
-
 			rdpsnd_virtual_channel_event_terminated(plugin);
-			plugin = NULL;
 			break;
 
 		case CHANNEL_EVENT_ATTACHED:

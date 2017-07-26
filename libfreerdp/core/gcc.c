@@ -33,6 +33,7 @@
 
 #define TAG FREERDP_TAG("core.gcc")
 
+
 /**
  * T.124 GCC is defined in:
  *
@@ -750,7 +751,6 @@ BOOL gcc_read_client_core_data(wStream* s, rdpMcs* mcs, UINT16 blockLength)
 
 		Stream_Read_UINT32(s,
 		                   settings->DeviceScaleFactor); /* deviceScaleFactor (4 bytes) */
-		blockLength -= 4;
 
 		if (settings->SelectedProtocol != serverSelectedProtocol)
 			return FALSE;
@@ -835,6 +835,9 @@ BOOL gcc_read_client_core_data(wStream* s, rdpMcs* mcs, UINT16 blockLength)
 	if (settings->SupportMonitorLayoutPdu)
 		settings->SupportMonitorLayoutPdu = (earlyCapabilityFlags &
 		                                     RNS_UD_CS_SUPPORT_MONITOR_LAYOUT_PDU) ? TRUE : FALSE;
+
+	if (settings->SupportStatusInfoPdu)
+		settings->SupportStatusInfoPdu = (earlyCapabilityFlags & RNS_UD_CS_SUPPORT_STATUSINFO_PDU) ? TRUE : FALSE;
 
 	if (!(earlyCapabilityFlags & RNS_UD_CS_VALID_CONNECTION_TYPE))
 		connectionType = 0;
@@ -936,6 +939,9 @@ void gcc_write_client_core_data(wStream* s, rdpMcs* mcs)
 
 	if (settings->SupportMonitorLayoutPdu)
 		earlyCapabilityFlags |= RNS_UD_CS_SUPPORT_MONITOR_LAYOUT_PDU;
+
+	if (settings->SupportStatusInfoPdu)
+		earlyCapabilityFlags |= RNS_UD_CS_SUPPORT_STATUSINFO_PDU;
 
 	Stream_Write_UINT16(s, highColorDepth); /* highColorDepth */
 	Stream_Write_UINT16(s, supportedColorDepths); /* supportedColorDepths */
@@ -1183,38 +1189,50 @@ BOOL gcc_read_server_security_data(wStream* s, rdpMcs* mcs)
 	Stream_Read_UINT32(s, settings->ServerRandomLength); /* serverRandomLen */
 	Stream_Read_UINT32(s, settings->ServerCertificateLength); /* serverCertLen */
 
-	if (Stream_GetRemainingLength(s) < settings->ServerRandomLength +
-	    settings->ServerCertificateLength)
+	if ((settings->ServerRandomLength == 0) || (settings->ServerCertificateLength == 0))
 		return FALSE;
 
-	if ((settings->ServerRandomLength <= 0)
-	    || (settings->ServerCertificateLength <= 0))
+	if (Stream_GetRemainingLength(s) < settings->ServerRandomLength)
 		return FALSE;
 
 	/* serverRandom */
 	settings->ServerRandom = (BYTE*) malloc(settings->ServerRandomLength);
 
 	if (!settings->ServerRandom)
-		return FALSE;
+		goto fail;
 
 	Stream_Read(s, settings->ServerRandom, settings->ServerRandomLength);
+
+	if (Stream_GetRemainingLength(s) < settings->ServerCertificateLength)
+		goto fail;
+
 	/* serverCertificate */
 	settings->ServerCertificate = (BYTE*) malloc(settings->ServerCertificateLength);
 
 	if (!settings->ServerCertificate)
-		return FALSE;
+		goto fail;
 
 	Stream_Read(s, settings->ServerCertificate, settings->ServerCertificateLength);
 	certificate_free(settings->RdpServerCertificate);
 	settings->RdpServerCertificate = certificate_new();
 
 	if (!settings->RdpServerCertificate)
-		return FALSE;
+		goto fail;
 
 	data = settings->ServerCertificate;
 	length = settings->ServerCertificateLength;
-	return certificate_read_server_certificate(settings->RdpServerCertificate, data,
-	        length);
+	if (!certificate_read_server_certificate(settings->RdpServerCertificate, data,
+	        length))
+		goto fail;
+
+	return TRUE;
+
+fail:
+	free (settings->ServerRandom);
+	free (settings->ServerCertificate);
+	settings->ServerRandom = NULL;
+	settings->ServerCertificate = NULL;
+	return FALSE;
 }
 
 static const BYTE initial_signature[] =
@@ -1698,6 +1716,16 @@ BOOL gcc_read_client_monitor_data(wStream* s, rdpMcs* mcs, UINT16 blockLength)
 
 	Stream_Read_UINT32(s, flags); /* flags */
 	Stream_Read_UINT32(s, monitorCount); /* monitorCount */
+
+	/* 2.2.1.3.6 Client Monitor Data -
+	 * monitorCount (4 bytes): A 32-bit, unsigned integer. The number of display
+	 * monitor definitions in the monitorDefArray field (the maximum allowed is 16).
+	 */
+	if (monitorCount > 16)
+	{
+		WLog_ERR(TAG, "announced monitors(%"PRIu32") exceed the 16 limit", monitorCount);
+		return FALSE;
+	}
 
 	if (monitorCount > settings->MonitorDefArraySize)
 	{

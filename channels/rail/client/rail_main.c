@@ -7,6 +7,8 @@
  * Copyright 2011 Vic Lee
  * Copyright 2015 Thincast Technologies GmbH
  * Copyright 2015 DI (FH) Martin Haimberger <martin.haimberger@thincast.com>
+ * Copyright 2017 Armin Novak <armin.novak@thincast.com>
+ * Copyright 2017 Thincast Technologies GmbH
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -90,6 +92,25 @@ UINT rail_send_channel_data(railPlugin* rail, void* data, size_t length)
 }
 
 /**
+ * used by rail_client_execute() to free RAIL_EXEC_ORDER's
+ * internal malloced memory;
+ */
+static void rail_client_clean_exec_order(RAIL_EXEC_ORDER* exec)
+{
+    if (!exec)
+        return;
+
+    free(exec->exeOrFile.string);
+    exec->exeOrFile.string = NULL;
+
+    free(exec->workingDir.string);
+    exec->workingDir.string = NULL;
+
+    free(exec->arguments.string);
+    exec->arguments.string = NULL;
+}
+
+/**
  * Callback Interface
  */
 
@@ -102,6 +123,7 @@ static UINT rail_client_execute(RailClientContext* context,
                                 RAIL_EXEC_ORDER* exec)
 {
 	char* exeOrFile;
+	UINT error;
 	railPlugin* rail = (railPlugin*) context->handle;
 	exeOrFile = exec->RemoteApplicationProgram;
 
@@ -120,7 +142,9 @@ static UINT rail_client_execute(RailClientContext* context,
 	                              &exec->workingDir); /* ShellWorkingDirectory */
 	rail_string_to_unicode_string(exec->RemoteApplicationArguments,
 	                              &exec->arguments); /* RemoteApplicationCmdLine */
-	return rail_send_client_exec_order(rail, exec);
+	error = rail_send_client_exec_order(rail, exec);
+	rail_client_clean_exec_order(exec);
+	return error;
 }
 
 /**
@@ -167,9 +191,13 @@ static UINT rail_send_client_sysparam(RailClientContext* context,
 		case SPI_SET_HIGH_CONTRAST:
 			length += sysparam->highContrast.colorSchemeLength + 10;
 			break;
+
+		default:
+			length += 8;
+			break;
 	}
 
-	s = rail_pdu_init(RAIL_SYSPARAM_ORDER_LENGTH + 8);
+	s = rail_pdu_init(length);
 
 	if (!s)
 	{
@@ -608,7 +636,9 @@ static void* rail_virtual_channel_client_thread(void* arg)
 		{
 			data = (wStream*) message.wParam;
 
-			if ((error = rail_order_recv(rail, data)))
+			error = rail_order_recv(rail, data);
+			Stream_Free(data, TRUE);
+			if (error)
 			{
 				WLog_ERR(TAG, "rail_order_recv failed with error %"PRIu32"!", error);
 				break;

@@ -40,7 +40,7 @@
 
 #define CLAMP_COORDINATES(x, y) if (x < 0) x = 0; if (y < 0) y = 0
 
-const char* const X11_EVENT_STRINGS[] =
+static const char* const X11_EVENT_STRINGS[] =
 {
 	"", "",
 	"KeyPress",
@@ -97,7 +97,7 @@ BOOL xf_event_action_script_init(xfContext* xfc)
 		return FALSE;
 
 	ArrayList_Object(xfc->xevents)->fnObjectFree = free;
-	sprintf_s(command, sizeof(command), "%s xevent", xfc->actionScript);
+	sprintf_s(command, sizeof(command), "%s xevent", xfc->context.settings->ActionScript);
 	actionScript = popen(command, "r");
 
 	if (!actionScript)
@@ -140,7 +140,7 @@ static BOOL xf_event_execute_action_script(xfContext* xfc, XEvent* event)
 	char buffer[1024] = { 0 };
 	char command[1024] = { 0 };
 
-	if (!xfc->actionScript || !xfc->xevents)
+	if (!xfc->actionScriptExists || !xfc->xevents)
 		return FALSE;
 
 	if (event->type > (sizeof(X11_EVENT_STRINGS) / sizeof(const char*)))
@@ -164,7 +164,7 @@ static BOOL xf_event_execute_action_script(xfContext* xfc, XEvent* event)
 		return FALSE;
 
 	sprintf_s(command, sizeof(command), "%s xevent %s %lu",
-	          xfc->actionScript, xeventName, (unsigned long) xfc->window->handle);
+	          xfc->context.settings->ActionScript, xeventName, (unsigned long) xfc->window->handle);
 	actionScript = popen(command, "r");
 
 	if (!actionScript)
@@ -311,7 +311,6 @@ BOOL xf_generic_ButtonPress(xfContext* xfc, int x, int y, int button,
 	BOOL extended;
 	rdpInput* input;
 	Window childWindow;
-	flags = 0;
 	wheel = FALSE;
 	extended = FALSE;
 	input = xfc->context.input;
@@ -407,14 +406,14 @@ static BOOL xf_event_ButtonPress(xfContext* xfc, XEvent* event, BOOL app)
 BOOL xf_generic_ButtonRelease(xfContext* xfc, int x, int y, int button,
                               Window window, BOOL app)
 {
-	int flags;
-	BOOL wheel;
-	BOOL extended;
+	int flags = 0;
+	BOOL extended = FALSE;
 	rdpInput* input;
 	Window childWindow;
-	flags = 0;
-	wheel = FALSE;
-	extended = FALSE;
+
+	if (!xfc || !xfc->context.input)
+		return FALSE;
+
 	input = xfc->context.input;
 
 	switch (button)
@@ -490,20 +489,11 @@ static BOOL xf_event_KeyPress(xfContext* xfc, XEvent* event, BOOL app)
 static BOOL xf_event_KeyRelease(xfContext* xfc, XEvent* event, BOOL app)
 {
 	XEvent nextEvent;
+	KeySym keysym;
+	char str[256];
 
-	if (XPending(xfc->display))
-	{
-		ZeroMemory(&nextEvent, sizeof(nextEvent));
-		XPeekEvent(xfc->display, &nextEvent);
-
-		if (nextEvent.type == KeyPress)
-		{
-			if (nextEvent.xkey.keycode == event->xkey.keycode)
-				return TRUE;
-		}
-	}
-
-	xf_keyboard_key_release(xfc, event->xkey.keycode);
+	XLookupString((XKeyEvent*) event, str, sizeof(str), &keysym, NULL);
+	xf_keyboard_key_release(xfc, event->xkey.keycode, keysym);
 	return TRUE;
 }
 
@@ -1059,10 +1049,7 @@ BOOL xf_event_process(freerdp* instance, XEvent* event)
 			break;
 	}
 
-	if (!xfc->remote_app)
-	{
-		xf_cliprdr_handle_xevent(xfc, event);
-	}
+	xf_cliprdr_handle_xevent(xfc, event);
 
 	xf_input_handle_event(xfc, event);
 	XSync(xfc->display, FALSE);
