@@ -232,9 +232,11 @@ ln -s freerdp2.pc %buildroot%_pkgconfigdir/freerdp.pc
 %_bindir/xfreerdp
 %_man1dir/xfreerdp*
 %_bindir/winpr-*
+%_man1dir/winpr-*
 
 %files -n wlfreerdp
 %_bindir/wlfreerdp
+%_man1dir/wlfreerdp*
 
 %if_with directfb
 %files -n dfreerdp
@@ -243,40 +245,41 @@ ln -s freerdp2.pc %buildroot%_pkgconfigdir/freerdp.pc
 
 %files server
 %_bindir/freerdp-shadow-cli
+%_man1dir/freerdp-shadow-cli.*
 
 %files -n lib%name
 %doc LICENSE README ChangeLog
-%_libdir/lib%{name}.so.*
-%_libdir/lib%{name}-client.so.*
+%_libdir/lib%{name}2.so.*
+%_libdir/lib%{name}-client2.so.*
 %dir %_libdir/freerdp*
 %_man7dir/wlog*
 
 %files -n lib%name-server
-%_libdir/lib%{name}-server.so.*
-%_libdir/lib%{name}-shadow-subsystem.so.*
-%_libdir/lib%{name}-shadow.so.*
+%_libdir/lib%{name}-server2.so.*
+%_libdir/lib%{name}-shadow-subsystem2.so.*
+%_libdir/lib%{name}-shadow2.so.*
 
 %files plugins-standard
 %_libdir/freerdp*/*.so
 
 %files -n libwinpr
-%_libdir/libwinpr.so.*
-%_libdir/libwinpr-tools.so.*
+%_libdir/libwinpr2.so.*
+%_libdir/libwinpr-tools2.so.*
 
 %files -n libwinpr-devel
 %_libdir/cmake/WinPR*
 %_includedir/winpr*
-%_libdir/libwinpr.so
-%_libdir/libwinpr-tools.so
+%_libdir/libwinpr2.so
+%_libdir/libwinpr-tools2.so
 %_pkgconfigdir/winpr*.pc
 
 %files -n libuwac
-%_libdir/libuwac.so.*
+%_libdir/libuwac0.so.*
 
 %files -n libuwac-devel
 %_libdir/cmake/uwac*
 %_includedir/uwac*
-%_libdir/libuwac.so
+%_libdir/libuwac0.so
 %_pkgconfigdir/uwac*.pc
 
 %files -n lib%name-devel
