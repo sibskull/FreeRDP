@@ -4,7 +4,7 @@
 
 Name: freerdp
 Version: 2.0.0
-Release: alt0.git20170724
+Release: alt1.git20170724%ubt
 
 Group: Networking/Remote access
 Summary: Remote Desktop Protocol functionality
@@ -18,6 +18,7 @@ Requires: xfreerdp = %EVR
 Requires: wlfreerdp = %EVR
 Requires: %name-plugins-standard = %EVR
 
+BuildRequires(pre): rpm-build-ubt
 BuildRequires: cmake gcc-c++
 BuildRequires: docbook-style-xsl git-core xmlto libpcre-devel
 BuildRequires: pkgconfig(alsa)
@@ -289,6 +290,9 @@ ln -s freerdp2.pc %buildroot%_pkgconfigdir/freerdp.pc
 %_pkgconfigdir/freerdp*.pc
 
 %changelog
+* Tue Sep 26 2017 Alexey Shabalin <shaba@altlinux.ru> 2.0.0-alt1.git20170724%ubt
+- increase release number for allow backport to p8
+
 * Wed Jul 26 2017 Alexey Shabalin <shaba@altlinux.ru> 2.0.0-alt0.git20170724
 - First release candidate for 2.0.0
 
