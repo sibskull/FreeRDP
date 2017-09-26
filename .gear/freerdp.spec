@@ -13,6 +13,7 @@ URL: http://www.freerdp.com
 Packager: Mikhail Kolchin <mvk@altlinux.org>
 
 Source: %name-%version.tar
+Patch: Fix-gstreamer-1.0-detection.patch
 
 Requires: xfreerdp = %EVR
 Requires: wlfreerdp = %EVR
@@ -172,6 +173,7 @@ the RDP protocol.
 
 %prep
 %setup
+%patch -p1
 
 %build
 %cmake \
@@ -291,6 +293,7 @@ ln -s freerdp2.pc %buildroot%_pkgconfigdir/freerdp.pc
 
 %changelog
 * Tue Sep 26 2017 Alexey Shabalin <shaba@altlinux.ru> 2.0.0-alt1.git20170724%ubt
+- Fix gstreamer-1.0 detection
 - increase release number for allow backport to p8
 
 * Wed Jul 26 2017 Alexey Shabalin <shaba@altlinux.ru> 2.0.0-alt0.git20170724
