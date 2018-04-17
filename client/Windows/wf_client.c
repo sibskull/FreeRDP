@@ -119,10 +119,10 @@ static BOOL wf_begin_paint(rdpContext* context)
 {
 	HGDI_DC hdc;
 
-	if (!context || !context->gdi || !context->gdi->hdc)
+	if (!context || !context->gdi || !context->gdi->primary || !context->gdi->primary->hdc)
 		return FALSE;
 
-	hdc = context->gdi->hdc;
+	hdc = context->gdi->primary->hdc;
 
 	if (!hdc || !hdc->hwnd || !hdc->hwnd->invalid)
 		return FALSE;
@@ -274,9 +274,9 @@ static BOOL wf_pre_connect(freerdp* instance)
 	freerdp_set_param_uint32(settings, FreeRDP_KeyboardLayout,
 	                         (int) GetKeyboardLayout(0) & 0x0000FFFF);
 	PubSub_SubscribeChannelConnected(instance->context->pubSub,
-	                                 (pChannelConnectedEventHandler) wf_OnChannelConnectedEventHandler);
+	                                 wf_OnChannelConnectedEventHandler);
 	PubSub_SubscribeChannelDisconnected(instance->context->pubSub,
-	                                    (pChannelDisconnectedEventHandler) wf_OnChannelDisconnectedEventHandler);
+	                                    wf_OnChannelDisconnectedEventHandler);
 	return TRUE;
 }
 
@@ -505,7 +505,7 @@ static DWORD wf_verify_certificate(freerdp* instance,
 	WLog_INFO(TAG,
 	          "The above X.509 certificate could not be verified, possibly because you do not have "
 	          "the CA certificate in your certificate store, or the certificate has expired. "
-	          "Please look at the documentation on how to create local certificate store for a private CA.");
+	          "Please look at the OpenSSL documentation on how to add a private CA to the store.\n");
 	/* TODO: ask for user validation */
 #if 0
 	input_handle = GetStdHandle(STD_INPUT_HANDLE);
@@ -583,7 +583,7 @@ static BOOL wf_auto_reconnect(freerdp* instance)
 	return FALSE;
 }
 
-static void* wf_input_thread(void* arg)
+static DWORD WINAPI wf_input_thread(LPVOID arg)
 {
 	int status;
 	wMessage message;
@@ -609,7 +609,7 @@ static void* wf_input_thread(void* arg)
 	}
 
 	ExitThread(0);
-	return NULL;
+	return 0;
 }
 
 static DWORD WINAPI wf_client_thread(LPVOID lpParam)
@@ -620,6 +620,7 @@ static DWORD WINAPI wf_client_thread(LPVOID lpParam)
 	BOOL msg_ret;
 	int quit_msg;
 	DWORD nCount;
+	DWORD error;
 	HANDLE handles[64];
 	wfContext* wfc;
 	freerdp* instance;
@@ -634,7 +635,7 @@ static DWORD WINAPI wf_client_thread(LPVOID lpParam)
 	wfc = (wfContext*) instance->context;
 
 	if (!freerdp_connect(instance))
-		return 0;
+		goto end;
 
 	channels = instance->context->channels;
 	settings = instance->context->settings;
@@ -643,8 +644,7 @@ static DWORD WINAPI wf_client_thread(LPVOID lpParam)
 
 	if (async_input)
 	{
-		if (!(input_thread = CreateThread(NULL, 0,
-		                                  (LPTHREAD_START_ROUTINE) wf_input_thread,
+		if (!(input_thread = CreateThread(NULL, 0, wf_input_thread,
 		                                  instance, 0, NULL)))
 		{
 			WLog_ERR(TAG, "Failed to create async input thread.");
@@ -753,9 +753,11 @@ disconnect:
 	if (async_input)
 		CloseHandle(input_thread);
 
-	WLog_DBG(TAG, "Main thread exited.");
-	ExitThread(0);
-	return 0;
+end:
+	error = freerdp_get_last_error(instance->context);
+	WLog_DBG(TAG, "Main thread exited with %" PRIu32, error);
+	ExitThread(error);
+	return error;
 }
 
 static DWORD WINAPI wf_keyboard_thread(LPVOID lpParam)
