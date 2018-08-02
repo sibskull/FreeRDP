@@ -82,6 +82,12 @@ static UINT audin_server_select_format(audin_server_context* context,
 	}
 
 	context->selected_client_format = client_format_index;
+	if (!freerdp_dsp_context_reset(audin->dsp_context,
+								   &audin->context.client_formats[client_format_index]))
+	{
+		WLog_ERR(TAG, "Failed to reset dsp context format!");
+		return ERROR_INTERNAL_ERROR;
+	}
 
 	if (audin->opened)
 	{
@@ -339,10 +345,9 @@ static UINT audin_server_recv_data(audin_server* audin, wStream* s,
 	AUDIO_FORMAT* format;
 	int sbytes_per_sample;
 	int sbytes_per_frame;
-	BYTE* src;
-	int size;
 	int frames;
-	UINT success = CHANNEL_RC_OK;
+	wStream* out;
+	UINT success = ERROR_INTERNAL_ERROR;
 
 	if (audin->context.selected_client_format < 0)
 	{
@@ -351,53 +356,28 @@ static UINT audin_server_recv_data(audin_server* audin, wStream* s,
 		return ERROR_INVALID_DATA;
 	}
 
+	out = Stream_New(NULL, 4096);
+
+	if (!out)
+		return ERROR_OUTOFMEMORY;
+
 	format = &audin->context.client_formats[audin->context.selected_client_format];
 
-	if (format->wFormatTag == WAVE_FORMAT_ADPCM)
+	if (freerdp_dsp_decode(audin->dsp_context, format, Stream_Pointer(s), length, out))
 	{
-		audin->dsp_context->decode_ms_adpcm(audin->dsp_context,
-		                                    Stream_Pointer(s), length, format->nChannels, format->nBlockAlign);
-		size = audin->dsp_context->adpcm_size;
-		src = audin->dsp_context->adpcm_buffer;
-		sbytes_per_sample = 2;
-		sbytes_per_frame = format->nChannels * 2;
-	}
-	else if (format->wFormatTag == WAVE_FORMAT_DVI_ADPCM)
-	{
-		audin->dsp_context->decode_ima_adpcm(audin->dsp_context,
-		                                     Stream_Pointer(s), length, format->nChannels, format->nBlockAlign);
-		size = audin->dsp_context->adpcm_size;
-		src = audin->dsp_context->adpcm_buffer;
-		sbytes_per_sample = 2;
-		sbytes_per_frame = format->nChannels * 2;
-	}
-	else
-	{
-		size = length;
-		src = Stream_Pointer(s);
+		Stream_SealLength(out);
 		sbytes_per_sample = format->wBitsPerSample / 8;
 		sbytes_per_frame = format->nChannels * sbytes_per_sample;
-	}
+		frames = Stream_Length(out) / sbytes_per_frame;
+		IFCALLRET(audin->context.ReceiveSamples, success, &audin->context, Stream_Buffer(out), frames);
 
-	if (format->nSamplesPerSec == audin->context.dst_format.nSamplesPerSec
-	    && format->nChannels == audin->context.dst_format.nChannels)
-	{
-		frames = size / sbytes_per_frame;
+		if (success)
+			WLog_ERR(TAG, "context.ReceiveSamples failed with error %"PRIu32"", success);
 	}
 	else
-	{
-		audin->dsp_context->resample(audin->dsp_context, src, sbytes_per_sample,
-		                             format->nChannels, format->nSamplesPerSec, size / sbytes_per_frame,
-		                             audin->context.dst_format.nChannels, audin->context.dst_format.nSamplesPerSec);
-		frames = audin->dsp_context->resampled_frames;
-		src = audin->dsp_context->resampled_buffer;
-	}
+		WLog_ERR(TAG, "freerdp_dsp_decode failed!");
 
-	IFCALLRET(audin->context.ReceiveSamples, success, &audin->context, src, frames);
-
-	if (success)
-		WLog_ERR(TAG, "context.ReceiveSamples failed with error %"PRIu32"", success);
-
+	Stream_Free(out, TRUE);
 	return success;
 }
 
@@ -694,7 +674,7 @@ audin_server_context* audin_server_context_new(HANDLE vcm)
 	audin->context.SelectFormat = audin_server_select_format;
 	audin->context.Open = audin_server_open;
 	audin->context.Close = audin_server_close;
-	audin->dsp_context = freerdp_dsp_context_new();
+	audin->dsp_context = freerdp_dsp_context_new(FALSE);
 
 	if (!audin->dsp_context)
 	{

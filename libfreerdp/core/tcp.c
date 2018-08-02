@@ -201,7 +201,7 @@ static long transport_bio_simple_ctrl(BIO* bio, int cmd, long arg1, void* arg2)
 		if (!BIO_get_init(bio) || !arg2)
 			return 0;
 
-		*((ULONG_PTR*) arg2) = (ULONG_PTR) ptr->socket;
+		*((SOCKET*) arg2) = ptr->socket;
 		return 1;
 	}
 	else if (cmd == BIO_C_GET_EVENT)
@@ -209,7 +209,7 @@ static long transport_bio_simple_ctrl(BIO* bio, int cmd, long arg1, void* arg2)
 		if (!BIO_get_init(bio) || !arg2)
 			return 0;
 
-		*((ULONG_PTR*) arg2) = (ULONG_PTR) ptr->hEvent;
+		*((HANDLE*) arg2) = ptr->hEvent;
 		return 1;
 	}
 	else if (cmd == BIO_C_SET_NONBLOCK)
@@ -664,17 +664,16 @@ BIO_METHOD* BIO_s_buffered_socket(void)
 	return bio_methods;
 }
 
-static char* freerdp_tcp_get_ip_address(int sockfd, BOOL* pIPv6)
+static char* freerdp_tcp_address_to_string(const struct sockaddr_storage* addr, BOOL* pIPv6)
 {
-	socklen_t length;
 	char ipAddress[INET6_ADDRSTRLEN + 1] = { 0 };
-	struct sockaddr_storage saddr = { 0 };
-	struct sockaddr_in6* sockaddr_ipv6 = (struct sockaddr_in6*)&saddr;
-	struct sockaddr_in* sockaddr_ipv4 = (struct sockaddr_in*)&saddr;
-	length = sizeof(struct sockaddr_storage);
+	struct sockaddr_in6* sockaddr_ipv6 = (struct sockaddr_in6*)addr;
+	struct sockaddr_in* sockaddr_ipv4 = (struct sockaddr_in*)addr;
 
-	if (getsockname(sockfd, (struct sockaddr*)&saddr, &length) != 0)
+	if (addr == NULL)
+	{
 		return NULL;
+	}
 
 	switch (sockaddr_ipv4->sin_family)
 	{
@@ -698,10 +697,38 @@ static char* freerdp_tcp_get_ip_address(int sockfd, BOOL* pIPv6)
 			return NULL;
 	}
 
-	if (pIPv6)
+	if (pIPv6 != NULL)
+	{
 		*pIPv6 = (sockaddr_ipv4->sin_family == AF_INET6);
+	}
 
 	return _strdup(ipAddress);
+}
+
+static char* freerdp_tcp_get_ip_address(int sockfd, BOOL* pIPv6)
+{
+	struct sockaddr_storage saddr = { 0 };
+	socklen_t length = sizeof(struct sockaddr_storage);
+
+	if (getsockname(sockfd, (struct sockaddr*)&saddr, &length) != 0)
+	{
+		return NULL;
+	}
+
+	return freerdp_tcp_address_to_string(&saddr, pIPv6);
+}
+
+char* freerdp_tcp_get_peer_address(SOCKET sockfd)
+{
+	struct sockaddr_storage saddr = { 0 };
+	socklen_t length = sizeof(struct sockaddr_storage);
+
+	if (getpeername(sockfd, (struct sockaddr*)&saddr, &length) != 0)
+	{
+		return NULL;
+	}
+
+	return freerdp_tcp_address_to_string(&saddr, NULL);
 }
 
 static int freerdp_uds_connect(const char* path)
@@ -1070,7 +1097,12 @@ int freerdp_tcp_connect(rdpContext* context, rdpSettings* settings,
 	BOOL useExternalDefinedSocket = FALSE;
 
 	if (!hostname)
+	{
+		if (freerdp_get_last_error(context) == FREERDP_ERROR_SUCCESS)
+			freerdp_set_last_error(context, FREERDP_ERROR_CONNECT_FAILED);
+
 		return -1;
+	}
 
 	if (hostname[0] == '/')
 		ipcSocket = TRUE;
@@ -1083,7 +1115,12 @@ int freerdp_tcp_connect(rdpContext* context, rdpSettings* settings,
 		sockfd = freerdp_uds_connect(hostname);
 
 		if (sockfd < 0)
+		{
+			if (freerdp_get_last_error(context) == FREERDP_ERROR_SUCCESS)
+				freerdp_set_last_error(context, FREERDP_ERROR_CONNECT_FAILED);
+
 			return -1;
+		}
 	}
 	else if (useExternalDefinedSocket)
 		sockfd = port;
@@ -1110,6 +1147,7 @@ int freerdp_tcp_connect(rdpContext* context, rdpSettings* settings,
 		if (sockfd <= 0)
 		{
 			char port_str[16];
+			char* peerAddress;
 			struct addrinfo hints;
 			struct addrinfo* addr;
 			struct addrinfo* result;
@@ -1146,8 +1184,17 @@ int freerdp_tcp_connect(rdpContext* context, rdpSettings* settings,
 
 			if (sockfd < 0)
 			{
+				if (freerdp_get_last_error(context) == FREERDP_ERROR_SUCCESS)
+					freerdp_set_last_error(context, FREERDP_ERROR_CONNECT_FAILED);
+
 				freeaddrinfo(result);
 				return -1;
+			}
+
+			if ((peerAddress = freerdp_tcp_address_to_string((struct sockaddr_storage*)addr->ai_addr, NULL)) != NULL)
+			{
+				WLog_DBG(TAG, "connecting to peer %s", peerAddress);
+				free(peerAddress);
 			}
 
 			if (!freerdp_tcp_connect_timeout(context, sockfd, addr->ai_addr,
@@ -1155,6 +1202,10 @@ int freerdp_tcp_connect(rdpContext* context, rdpSettings* settings,
 			{
 				freeaddrinfo(result);
 				close(sockfd);
+
+				if (freerdp_get_last_error(context) == FREERDP_ERROR_SUCCESS)
+					freerdp_set_last_error(context, FREERDP_ERROR_CONNECT_FAILED);
+
 				WLog_ERR(TAG, "failed to connect to %s", hostname);
 				return -1;
 			}
@@ -1170,6 +1221,9 @@ int freerdp_tcp_connect(rdpContext* context, rdpSettings* settings,
 	{
 		if (!useExternalDefinedSocket)
 			close(sockfd);
+
+		if (freerdp_get_last_error(context) == FREERDP_ERROR_SUCCESS)
+			freerdp_set_last_error(context, FREERDP_ERROR_CONNECT_FAILED);
 
 		WLog_ERR(TAG, "Couldn't get socket ip address");
 		return -1;
@@ -1195,6 +1249,10 @@ int freerdp_tcp_connect(rdpContext* context, rdpSettings* settings,
 			if (setsockopt(sockfd, SOL_SOCKET, SO_RCVBUF, (void*) &optval, optlen) < 0)
 			{
 				close(sockfd);
+
+				if (freerdp_get_last_error(context) == FREERDP_ERROR_SUCCESS)
+					freerdp_set_last_error(context, FREERDP_ERROR_CONNECT_FAILED);
+
 				WLog_ERR(TAG, "unable to set receive buffer len");
 				return -1;
 			}
@@ -1206,6 +1264,10 @@ int freerdp_tcp_connect(rdpContext* context, rdpSettings* settings,
 		if (!freerdp_tcp_set_keep_alive_mode(sockfd))
 		{
 			close(sockfd);
+
+			if (freerdp_get_last_error(context) == FREERDP_ERROR_SUCCESS)
+				freerdp_set_last_error(context, FREERDP_ERROR_CONNECT_FAILED);
+
 			WLog_ERR(TAG, "Couldn't set keep alive mode.");
 			return -1;
 		}
@@ -1214,6 +1276,10 @@ int freerdp_tcp_connect(rdpContext* context, rdpSettings* settings,
 	if (WaitForSingleObject(context->abortEvent, 0) == WAIT_OBJECT_0)
 	{
 		close(sockfd);
+
+		if (freerdp_get_last_error(context) == FREERDP_ERROR_SUCCESS)
+			freerdp_set_last_error(context, FREERDP_ERROR_CONNECT_CANCELLED);
+
 		return -1;
 	}
 

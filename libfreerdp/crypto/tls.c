@@ -78,12 +78,6 @@ struct _BIO_RDP_TLS
 };
 typedef struct _BIO_RDP_TLS BIO_RDP_TLS;
 
-static long bio_rdp_tls_callback(BIO* bio, int mode, const char* argp, int argi,
-                                 long argl, long ret)
-{
-	return 1;
-}
-
 static int bio_rdp_tls_write(BIO* bio, const char* buf, int size)
 {
 	int error;
@@ -693,7 +687,7 @@ static int tls_do_handshake(rdpTls* tls, BOOL clientMode)
 		int status;
 		struct pollfd pollfds;
 #elif !defined(_WIN32)
-		int fd;
+		SOCKET fd;
 		int status;
 		fd_set rset;
 		struct timeval tv;
@@ -737,7 +731,7 @@ static int tls_do_handshake(rdpTls* tls, BOOL clientMode)
 
 		do
 		{
-			status = poll(&pollfds, 1, 10 * 1000);
+			status = poll(&pollfds, 1, 10);
 		}
 		while ((status < 0) && (errno == EINTR));
 
@@ -853,13 +847,13 @@ int tls_connect(rdpTls* tls, BIO* underlying)
 	if (!tls_prepare(tls, underlying, SSLv23_client_method(), options, TRUE))
 		return FALSE;
 
-#ifndef OPENSSL_NO_TLSEXT
+#if !defined(OPENSSL_NO_TLSEXT) && !defined(LIBRESSL_VERSION_NUMBER)
 	SSL_set_tlsext_host_name(tls->ssl, tls->hostname);
 #endif
 	return tls_do_handshake(tls, TRUE);
 }
 
-#if defined(MICROSOFT_IOS_SNI_BUG) && !defined(OPENSSL_NO_TLSEXT)
+#if defined(MICROSOFT_IOS_SNI_BUG) && !defined(OPENSSL_NO_TLSEXT) && !defined(LIBRESSL_VERSION_NUMBER)
 static void tls_openssl_tlsext_debug_callback(SSL* s, int client_server,
         int type, unsigned char* data, int len, void* arg)
 {
@@ -1002,7 +996,7 @@ BOOL tls_accept(rdpTls* tls, BIO* underlying, rdpSettings* settings)
 		return FALSE;
 	}
 
-#if defined(MICROSOFT_IOS_SNI_BUG) && !defined(OPENSSL_NO_TLSEXT)
+#if defined(MICROSOFT_IOS_SNI_BUG) && !defined(OPENSSL_NO_TLSEXT) && !defined(LIBRESSL_VERSION_NUMBER)
 	SSL_set_tlsext_debug_callback(tls->ssl, tls_openssl_tlsext_debug_callback);
 #endif
 	return tls_do_handshake(tls, FALSE) > 0;
@@ -1050,21 +1044,6 @@ BOOL tls_send_alert(rdpTls* tls)
 
 #endif
 	return TRUE;
-}
-
-static BIO* findBufferedBio(BIO* front)
-{
-	BIO* ret = front;
-
-	while (ret)
-	{
-		if (BIO_method_type(ret) == BIO_TYPE_BUFFERED)
-			return ret;
-
-		ret = BIO_next(ret);
-	}
-
-	return ret;
 }
 
 int tls_write_all(rdpTls* tls, const BYTE* data, int length)
@@ -1130,6 +1109,185 @@ BOOL tls_match_hostname(char* pattern, int pattern_length, char* hostname)
 	return FALSE;
 }
 
+static BOOL is_redirected(rdpTls* tls)
+{
+	rdpSettings* settings = tls->settings;
+
+	if (LB_NOREDIRECT & settings->RedirectionFlags)
+		return FALSE;
+
+	return settings->RedirectionFlags != 0;
+}
+
+static BOOL is_accepted(rdpTls* tls, const BYTE* pem, size_t length)
+{
+	rdpSettings* settings = tls->settings;
+	char* AccpetedKey;
+	UINT32 AcceptedKeyLength;
+
+	if (tls->isGatewayTransport)
+	{
+		AccpetedKey = settings->GatewayAcceptedCert;
+		AcceptedKeyLength = settings->GatewayAcceptedCertLength;
+	}
+	else if (is_redirected(tls))
+	{
+		AccpetedKey = settings->RedirectionAcceptedCert;
+		AcceptedKeyLength = settings->RedirectionAcceptedCertLength;
+	}
+	else
+	{
+		AccpetedKey = settings->AcceptedCert;
+		AcceptedKeyLength = settings->AcceptedCertLength;
+	}
+
+	if (AcceptedKeyLength > 0)
+	{
+		if (AcceptedKeyLength == length)
+		{
+			if (memcmp(AccpetedKey, pem, AcceptedKeyLength) == 0)
+				return TRUE;
+		}
+	}
+
+	if (tls->isGatewayTransport)
+	{
+		free(settings->GatewayAcceptedCert);
+		settings->GatewayAcceptedCert = NULL;
+		settings->GatewayAcceptedCertLength = 0;
+	}
+	else if (is_redirected(tls))
+	{
+		free(settings->RedirectionAcceptedCert);
+		settings->RedirectionAcceptedCert = NULL;
+		settings->RedirectionAcceptedCertLength = 0;
+	}
+	else
+	{
+		free(settings->AcceptedCert);
+		settings->AcceptedCert = NULL;
+		settings->AcceptedCertLength = 0;
+	}
+
+	return FALSE;
+}
+
+static BOOL accept_cert(rdpTls* tls, const BYTE* pem, size_t length)
+{
+	rdpSettings* settings = tls->settings;
+
+	if (tls->isGatewayTransport)
+	{
+		settings->GatewayAcceptedCert = pem;
+		settings->GatewayAcceptedCertLength = length;
+	}
+	else if (is_redirected(tls))
+	{
+		settings->RedirectionAcceptedCert = pem;
+		settings->RedirectionAcceptedCertLength = length;
+	}
+	else
+	{
+		settings->AcceptedCert = pem;
+		settings->AcceptedCertLength = length;
+	}
+
+	return TRUE;
+}
+
+static BOOL tls_extract_pem(CryptoCert cert, BYTE** PublicKey, DWORD* PublicKeyLength)
+{
+	BIO* bio;
+	int status;
+	size_t offset;
+	int length = 0;
+	BOOL rc = FALSE;
+	BYTE* pemCert = NULL;
+
+	if (!PublicKey || !PublicKeyLength)
+		return FALSE;
+
+	*PublicKey = NULL;
+	*PublicKeyLength = 0;
+	/**
+	 * Don't manage certificates internally, leave it up entirely to the external client implementation
+	 */
+	bio = BIO_new(BIO_s_mem());
+
+	if (!bio)
+	{
+		WLog_ERR(TAG, "BIO_new() failure");
+		return FALSE;
+	}
+
+	status = PEM_write_bio_X509(bio, cert->px509);
+
+	if (status < 0)
+	{
+		WLog_ERR(TAG, "PEM_write_bio_X509 failure: %d", status);
+		goto fail;
+	}
+
+	offset = 0;
+	length = 2048;
+	pemCert = (BYTE*) malloc(length + 1);
+
+	if (!pemCert)
+	{
+		WLog_ERR(TAG, "error allocating pemCert");
+		goto fail;
+	}
+
+	status = BIO_read(bio, pemCert, length);
+
+	if (status < 0)
+	{
+		WLog_ERR(TAG, "failed to read certificate");
+		goto fail;
+	}
+
+	offset += status;
+
+	while (offset >= length)
+	{
+		int new_len;
+		BYTE* new_cert;
+		new_len = length * 2;
+		new_cert = (BYTE*) realloc(pemCert, new_len + 1);
+
+		if (!new_cert)
+			goto fail;
+
+		length = new_len;
+		pemCert = new_cert;
+		status = BIO_read(bio, &pemCert[offset], length);
+
+		if (status < 0)
+			break;
+
+		offset += status;
+	}
+
+	if (status < 0)
+	{
+		WLog_ERR(TAG, "failed to read certificate");
+		goto fail;
+	}
+
+	length = offset;
+	pemCert[length] = '\0';
+	*PublicKey = pemCert;
+	*PublicKeyLength = length;
+	rc = TRUE;
+fail:
+
+	if (!rc)
+		free(pemCert);
+
+	BIO_free(bio);
+	return rc;
+}
+
 int tls_verify_certificate(rdpTls* tls, CryptoCert cert, char* hostname,
                            int port)
 {
@@ -1144,92 +1302,36 @@ int tls_verify_certificate(rdpTls* tls, CryptoCert cert, char* hostname,
 	BOOL hostname_match = FALSE;
 	BOOL verification_status = FALSE;
 	rdpCertificateData* certificate_data;
+	freerdp* instance = (freerdp*) tls->settings->instance;
+	DWORD length;
+	BYTE* pemCert;
+
+	if (!tls_extract_pem(cert, &pemCert, &length))
+		return -1;
+
+	/* Check, if we already accepted this key. */
+	if (is_accepted(tls, pemCert, length))
+	{
+		free(pemCert);
+		return 1;
+	}
 
 	if (tls->settings->ExternalCertificateManagement)
 	{
-		BIO* bio;
-		int status;
-		int length;
-		int offset;
-		BYTE* pemCert;
-		freerdp* instance = (freerdp*) tls->settings->instance;
-		/**
-		 * Don't manage certificates internally, leave it up entirely to the external client implementation
-		 */
-		bio = BIO_new(BIO_s_mem());
-
-		if (!bio)
-		{
-			WLog_ERR(TAG, "BIO_new() failure");
-			return -1;
-		}
-
-		status = PEM_write_bio_X509(bio, cert->px509);
-
-		if (status < 0)
-		{
-			WLog_ERR(TAG, "PEM_write_bio_X509 failure: %d", status);
-			return -1;
-		}
-
-		offset = 0;
-		length = 2048;
-		pemCert = (BYTE*) malloc(length + 1);
-
-		if (!pemCert)
-		{
-			WLog_ERR(TAG, "error allocating pemCert");
-			return -1;
-		}
-
-		status = BIO_read(bio, pemCert, length);
-
-		if (status < 0)
-		{
-			WLog_ERR(TAG, "failed to read certificate");
-			return -1;
-		}
-
-		offset += status;
-
-		while (offset >= length)
-		{
-			int new_len;
-			BYTE* new_cert;
-			new_len = length * 2;
-			new_cert = (BYTE*) realloc(pemCert, new_len + 1);
-
-			if (!new_cert)
-				return -1;
-
-			length = new_len;
-			pemCert = new_cert;
-			status = BIO_read(bio, &pemCert[offset], length);
-
-			if (status < 0)
-				break;
-
-			offset += status;
-		}
-
-		if (status < 0)
-		{
-			WLog_ERR(TAG, "failed to read certificate");
-			return -1;
-		}
-
-		length = offset;
-		pemCert[length] = '\0';
-		status = -1;
+		int status = -1;
 
 		if (instance->VerifyX509Certificate)
 			status = instance->VerifyX509Certificate(instance, pemCert, length, hostname,
-			         port, tls->isGatewayTransport);
+			         port, tls->isGatewayTransport | is_redirected(tls) ? 2 : 0);
 		else
 			WLog_ERR(TAG, "No VerifyX509Certificate callback registered!");
 
-		free(pemCert);
-		BIO_free(bio);
+		if (status > 0)
+		{
+			accept_cert(tls, pemCert, length);
+		}
+		else
+			free(pemCert);
 
 		if (status < 0)
 		{
@@ -1243,10 +1345,19 @@ int tls_verify_certificate(rdpTls* tls, CryptoCert cert, char* hostname,
 
 	/* ignore certificate verification if user explicitly required it (discouraged) */
 	if (tls->settings->IgnoreCertificate)
+	{
+		free(pemCert);
 		return 1;  /* success! */
+	}
+
+	if (!tls->isGatewayTransport && tls->settings->AuthenticationLevel == 0)
+	{
+		free(pemCert);
+		return 1;  /* success! */
+	}
 
 	/* if user explicitly specified a certificate name, use it instead of the hostname */
-	if (tls->settings->CertificateName)
+	if (!tls->isGatewayTransport && tls->settings->CertificateName)
 		hostname = tls->settings->CertificateName;
 
 	/* attempt verification using OpenSSL and the ~/.freerdp/certs certificate store */
@@ -1291,7 +1402,6 @@ int tls_verify_certificate(rdpTls* tls, CryptoCert cert, char* hostname,
 		char* issuer;
 		char* subject;
 		char* fingerprint;
-		freerdp* instance = (freerdp*) tls->settings->instance;
 		DWORD accept_certificate = 0;
 		issuer = crypto_cert_issuer(cert->px509);
 		subject = crypto_cert_subject(cert->px509);
@@ -1401,6 +1511,15 @@ int tls_verify_certificate(rdpTls* tls, CryptoCert cert, char* hostname,
 	if (alt_names)
 		crypto_cert_subject_alt_name_free(alt_names_count, alt_names_lengths,
 		                                  alt_names);
+
+	if (verification_status > 0)
+	{
+		accept_cert(tls, pemCert, length);
+	}
+	else
+	{
+		free(pemCert);
+	}
 
 	return (verification_status == 0) ? 0 : 1;
 }

@@ -713,9 +713,11 @@ static UINT drdynvc_send(drdynvcPlugin* drdynvc, wStream* s)
 	{
 		case CHANNEL_RC_OK:
 			return CHANNEL_RC_OK;
+
 		case CHANNEL_RC_NOT_CONNECTED:
 			Stream_Free(s, TRUE);
 			return CHANNEL_RC_OK;
+
 		case CHANNEL_RC_BAD_CHANNEL_HANDLE:
 			Stream_Free(s, TRUE);
 			WLog_ERR(TAG, "VirtualChannelWriteEx failed with CHANNEL_RC_BAD_CHANNEL_HANDLE");
@@ -1205,7 +1207,6 @@ static void VCAPITYPE drdynvc_virtual_channel_open_event_ex(LPVOID lpUserParam, 
 	if (!drdynvc || (drdynvc->OpenHandle != openHandle))
 	{
 		WLog_ERR(TAG, "drdynvc_virtual_channel_open_event: error no match");
-		Stream_Free((wStream*) pData, TRUE);
 		return;
 	}
 
@@ -1220,7 +1221,6 @@ static void VCAPITYPE drdynvc_virtual_channel_open_event_ex(LPVOID lpUserParam, 
 			break;
 
 		case CHANNEL_EVENT_WRITE_COMPLETE:
-			Stream_Free((wStream*) pData, TRUE);
 			break;
 
 		case CHANNEL_EVENT_USER:
@@ -1380,7 +1380,8 @@ static UINT drdynvc_virtual_channel_event_connected(drdynvcPlugin* drdynvc, LPVO
 
 	drdynvc->state = DRDYNVC_STATE_CAPABILITIES;
 
-	if (!(drdynvc->thread = CreateThread(NULL, 0, drdynvc_virtual_channel_client_thread, (void*) drdynvc,
+	if (!(drdynvc->thread = CreateThread(NULL, 0, drdynvc_virtual_channel_client_thread,
+	                                     (void*) drdynvc,
 	                                     0, NULL)))
 	{
 		error = ERROR_INTERNAL_ERROR;
@@ -1400,6 +1401,9 @@ error:
 static UINT drdynvc_virtual_channel_event_disconnected(drdynvcPlugin* drdynvc)
 {
 	UINT status;
+
+	if (drdynvc->OpenHandle == 0)
+		return CHANNEL_RC_OK;
 
 	if (!drdynvc)
 		return CHANNEL_RC_BAD_CHANNEL_HANDLE;

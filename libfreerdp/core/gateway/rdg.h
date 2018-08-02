@@ -108,20 +108,11 @@ typedef struct rdp_rdg rdpRdg;
 enum
 {
 	RDG_CLIENT_STATE_INITIAL,
-	RDG_CLIENT_STATE_OUT_CHANNEL_REQUEST,
-	RDG_CLIENT_STATE_OUT_CHANNEL_AUTHORIZE,
-	RDG_CLIENT_STATE_OUT_CHANNEL_AUTHORIZED,
-	RDG_CLIENT_STATE_IN_CHANNEL_REQUEST,
-	RDG_CLIENT_STATE_IN_CHANNEL_AUTHORIZE,
-	RDG_CLIENT_STATE_IN_CHANNEL_AUTHORIZED,
 	RDG_CLIENT_STATE_HANDSHAKE,
 	RDG_CLIENT_STATE_TUNNEL_CREATE,
 	RDG_CLIENT_STATE_TUNNEL_AUTHORIZE,
 	RDG_CLIENT_STATE_CHANNEL_CREATE,
 	RDG_CLIENT_STATE_OPENED,
-	RDG_CLIENT_STATE_CLOSE,
-	RDG_CLIENT_STATE_CLOSED,
-	RDG_CLIENT_STATE_NOT_FOUND,
 };
 
 struct rdp_rdg
@@ -133,7 +124,6 @@ struct rdp_rdg
 	rdpTls* tlsOut;
 	rdpNtlm* ntlm;
 	HttpContext* http;
-	HANDLE readEvent;
 	CRITICAL_SECTION writeSection;
 
 	UUID guid;
@@ -148,8 +138,7 @@ struct rdp_rdg
 FREERDP_LOCAL rdpRdg* rdg_new(rdpTransport* transport);
 FREERDP_LOCAL void rdg_free(rdpRdg* rdg);
 
-FREERDP_LOCAL BOOL rdg_connect(rdpRdg* rdg, const char* hostname, UINT16 port,
-                               int timeout);
+FREERDP_LOCAL BOOL rdg_connect(rdpRdg* rdg, int timeout, BOOL* rpcFallback);
 FREERDP_LOCAL DWORD rdg_get_event_handles(rdpRdg* rdg, HANDLE* events,
         DWORD count);
 
