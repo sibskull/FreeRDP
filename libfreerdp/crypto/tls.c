@@ -26,6 +26,7 @@
 #include <errno.h>
 
 #include <winpr/crt.h>
+#include <winpr/string.h>
 #include <winpr/sspi.h>
 #include <winpr/ssl.h>
 
@@ -537,7 +538,7 @@ static BIO* BIO_new_rdp_tls(SSL_CTX* ctx, int client)
 
 	if (!ssl)
 	{
-		BIO_free(bio);
+		BIO_free_all(bio);
 		return NULL;
 	}
 
@@ -592,16 +593,14 @@ static void tls_free_certificate(CryptoCert cert)
 
 static SecPkgContext_Bindings* tls_get_channel_bindings(X509* cert)
 {
-	int PrefixLength;
-	BYTE CertificateHash[32];
 	UINT32 CertificateHashLength;
 	BYTE* ChannelBindingToken;
 	UINT32 ChannelBindingTokenLength;
 	SEC_CHANNEL_BINDINGS* ChannelBindings;
 	SecPkgContext_Bindings* ContextBindings;
-	ZeroMemory(CertificateHash, sizeof(CertificateHash));
+	const size_t PrefixLength = strnlen(TLS_SERVER_END_POINT, ARRAYSIZE(TLS_SERVER_END_POINT));
+	BYTE CertificateHash[32] = { 0 };
 	X509_digest(cert, EVP_sha256(), CertificateHash, &CertificateHashLength);
-	PrefixLength = strlen(TLS_SERVER_END_POINT);
 	ChannelBindingTokenLength = PrefixLength + CertificateHashLength;
 	ContextBindings = (SecPkgContext_Bindings*) calloc(1,
 	                  sizeof(SecPkgContext_Bindings));
@@ -622,9 +621,8 @@ static SecPkgContext_Bindings* tls_get_channel_bindings(X509* cert)
 	ChannelBindings->dwApplicationDataOffset = sizeof(SEC_CHANNEL_BINDINGS);
 	ChannelBindingToken = &((BYTE*)
 	                        ChannelBindings)[ChannelBindings->dwApplicationDataOffset];
-	strcpy((char*) ChannelBindingToken, TLS_SERVER_END_POINT);
-	CopyMemory(&ChannelBindingToken[PrefixLength], CertificateHash,
-	           CertificateHashLength);
+	memcpy(ChannelBindingToken, TLS_SERVER_END_POINT, PrefixLength);
+	memcpy(ChannelBindingToken + PrefixLength, CertificateHash, CertificateHashLength);
 	return ContextBindings;
 out_free:
 	free(ContextBindings);
@@ -652,6 +650,15 @@ static BOOL tls_prepare(rdpTls* tls, BIO* underlying, SSL_METHOD* method,
 	                 SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER | SSL_MODE_ENABLE_PARTIAL_WRITE);
 	SSL_CTX_set_options(tls->ctx, options);
 	SSL_CTX_set_read_ahead(tls->ctx, 1);
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
+	SSL_CTX_set_min_proto_version(tls->ctx, TLS1_VERSION); /* min version */
+	SSL_CTX_set_max_proto_version(tls->ctx, 0); /* highest supported version by library */
+#endif
+
+
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
+	SSL_CTX_set_security_level(tls->ctx, settings->TlsSecLevel);
+#endif
 
 	if (settings->AllowedTlsCiphers)
 	{
@@ -838,6 +845,8 @@ int tls_connect(rdpTls* tls, BIO* underlying)
 	 * support empty fragments. This needs to be disabled.
 	 */
 	options |= SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS;
+
+#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
 	/**
 	 * disable SSLv2 and SSLv3
 	 */
@@ -845,6 +854,9 @@ int tls_connect(rdpTls* tls, BIO* underlying)
 	options |= SSL_OP_NO_SSLv3;
 
 	if (!tls_prepare(tls, underlying, SSLv23_client_method(), options, TRUE))
+#else
+	if (!tls_prepare(tls, underlying, TLS_client_method(), options, TRUE))
+#endif
 		return FALSE;
 
 #if !defined(OPENSSL_NO_TLSEXT) && !defined(LIBRESSL_VERSION_NUMBER)
@@ -937,7 +949,7 @@ BOOL tls_accept(rdpTls* tls, BIO* underlying, rdpSettings* settings)
 	}
 
 	rsa = PEM_read_bio_RSAPrivateKey(bio, NULL, NULL, NULL);
-	BIO_free(bio);
+	BIO_free_all(bio);
 
 	if (!rsa)
 	{
@@ -981,7 +993,7 @@ BOOL tls_accept(rdpTls* tls, BIO* underlying, rdpSettings* settings)
 	}
 
 	x509 = PEM_read_bio_X509(bio, NULL, NULL, 0);
-	BIO_free(bio);
+	BIO_free_all(bio);
 
 	if (!x509)
 	{
@@ -1172,23 +1184,23 @@ static BOOL is_accepted(rdpTls* tls, const BYTE* pem, size_t length)
 	return FALSE;
 }
 
-static BOOL accept_cert(rdpTls* tls, const BYTE* pem, size_t length)
+static BOOL accept_cert(rdpTls* tls, BYTE* pem, UINT32 length)
 {
 	rdpSettings* settings = tls->settings;
 
 	if (tls->isGatewayTransport)
 	{
-		settings->GatewayAcceptedCert = pem;
+		settings->GatewayAcceptedCert = (char*)pem;
 		settings->GatewayAcceptedCertLength = length;
 	}
 	else if (is_redirected(tls))
 	{
-		settings->RedirectionAcceptedCert = pem;
+		settings->RedirectionAcceptedCert = (char*)pem;
 		settings->RedirectionAcceptedCertLength = length;
 	}
 	else
 	{
-		settings->AcceptedCert = pem;
+		settings->AcceptedCert = (char*)pem;
 		settings->AcceptedCertLength = length;
 	}
 
@@ -1260,7 +1272,7 @@ static BOOL tls_extract_pem(CryptoCert cert, BYTE** PublicKey, DWORD* PublicKeyL
 
 		length = new_len;
 		pemCert = new_cert;
-		status = BIO_read(bio, &pemCert[offset], length);
+		status = BIO_read(bio, &pemCert[offset], length - offset);
 
 		if (status < 0)
 			break;
@@ -1284,7 +1296,7 @@ fail:
 	if (!rc)
 		free(pemCert);
 
-	BIO_free(bio);
+	BIO_free_all(bio);
 	return rc;
 }
 
@@ -1295,9 +1307,9 @@ int tls_verify_certificate(rdpTls* tls, CryptoCert cert, char* hostname,
 	int index;
 	char* common_name = NULL;
 	int common_name_length = 0;
-	char** alt_names = NULL;
-	int alt_names_count = 0;
-	int* alt_names_lengths = NULL;
+	char** dns_names = 0;
+	int dns_names_count = 0;
+	int* dns_names_lengths = NULL;
 	BOOL certificate_status;
 	BOOL hostname_match = FALSE;
 	BOOL verification_status = FALSE;
@@ -1330,15 +1342,15 @@ int tls_verify_certificate(rdpTls* tls, CryptoCert cert, char* hostname,
 		{
 			accept_cert(tls, pemCert, length);
 		}
-		else
-			free(pemCert);
-
-		if (status < 0)
+		else if (status < 0)
 		{
 			WLog_ERR(TAG, "VerifyX509Certificate failed: (length = %d) status: [%d] %s",
 			         length, status, pemCert);
+			free(pemCert);
 			return -1;
 		}
+		else
+			free(pemCert);
 
 		return (status == 0) ? 0 : 1;
 	}
@@ -1367,8 +1379,8 @@ int tls_verify_certificate(rdpTls* tls, CryptoCert cert, char* hostname,
 	certificate_data = crypto_get_certificate_data(cert->px509, hostname, port);
 	/* extra common name and alternative names */
 	common_name = crypto_cert_subject_common_name(cert->px509, &common_name_length);
-	alt_names = crypto_cert_subject_alt_name(cert->px509, &alt_names_count,
-	            &alt_names_lengths);
+	dns_names = crypto_cert_get_dns_names(cert->px509, &dns_names_count,
+	                                      &dns_names_lengths);
 
 	/* compare against common name */
 
@@ -1380,11 +1392,11 @@ int tls_verify_certificate(rdpTls* tls, CryptoCert cert, char* hostname,
 
 	/* compare against alternative names */
 
-	if (alt_names)
+	if (dns_names)
 	{
-		for (index = 0; index < alt_names_count; index++)
+		for (index = 0; index < dns_names_count; index++)
 		{
-			if (tls_match_hostname(alt_names[index], alt_names_lengths[index], hostname))
+			if (tls_match_hostname(dns_names[index], dns_names_lengths[index], hostname))
 			{
 				hostname_match = TRUE;
 				break;
@@ -1415,8 +1427,8 @@ int tls_verify_certificate(rdpTls* tls, CryptoCert cert, char* hostname,
 			if (!hostname_match)
 				tls_print_certificate_name_mismatch_error(
 				    hostname, port,
-				    common_name, alt_names,
-				    alt_names_count);
+				    common_name, dns_names,
+				    dns_names_count);
 
 			/* Automatically accept certificate on first use */
 			if (tls->settings->AutoAcceptCertificate)
@@ -1508,9 +1520,9 @@ int tls_verify_certificate(rdpTls* tls, CryptoCert cert, char* hostname,
 	certificate_data_free(certificate_data);
 	free(common_name);
 
-	if (alt_names)
-		crypto_cert_subject_alt_name_free(alt_names_count, alt_names_lengths,
-		                                  alt_names);
+	if (dns_names)
+		crypto_cert_dns_names_free(dns_names_count, dns_names_lengths,
+		                           dns_names);
 
 	if (verification_status > 0)
 	{
@@ -1614,17 +1626,11 @@ void tls_free(rdpTls* tls)
 		tls->ctx = NULL;
 	}
 
-	if (tls->bio)
-	{
-		BIO_free(tls->bio);
-		tls->bio = NULL;
-	}
-
-	if (tls->underlying)
-	{
-		BIO_free(tls->underlying);
-		tls->underlying = NULL;
-	}
+	/* tls->underlying is a stacked BIO under tls->bio.
+	 * BIO_free_all will free recursivly. */
+	BIO_free_all(tls->bio);
+	tls->bio = NULL;
+	tls->underlying = NULL;
 
 	if (tls->PublicKey)
 	{

@@ -580,6 +580,7 @@ int makecert_context_output_certificate_file(MAKECERT_CONTEXT* context, char* pa
 	int offset;
 	char* filename = NULL;
 	char* fullpath = NULL;
+	char* ext;
 	int ret = -1;
 	BIO* bio = NULL;
 	BYTE* x509_str = NULL;
@@ -604,14 +605,16 @@ int makecert_context_output_certificate_file(MAKECERT_CONTEXT* context, char* pa
 	if (!filename)
 		return -1;
 
-	strcpy(filename, context->output_file);
-
 	if (context->crtFormat)
-		strcpy(&filename[length], ".crt");
+		ext = "crt";
 	else if (context->pemFormat)
-		strcpy(&filename[length], ".pem");
+		ext = "pem";
 	else if (context->pfxFormat)
-		strcpy(&filename[length], ".pfx");
+		ext = "pfx";
+	else
+		goto out_fail;
+
+	sprintf_s(filename, length + 8, "%s.%s", context->output_file, ext);
 
 	if (path)
 		fullpath = GetCombinedPath(path, filename);
@@ -764,7 +767,7 @@ int makecert_context_output_certificate_file(MAKECERT_CONTEXT* context, char* pa
 
 			free(x509_str);
 			x509_str = NULL;
-			BIO_free(bio);
+			BIO_free_all(bio);
 			bio = NULL;
 
 			if (context->pemFormat)
@@ -828,9 +831,7 @@ int makecert_context_output_certificate_file(MAKECERT_CONTEXT* context, char* pa
 
 	ret = 1;
 out_fail:
-
-	if (bio)
-		BIO_free(bio);
+	BIO_free_all(bio);
 
 	if (fp)
 		fclose(fp);
@@ -877,8 +878,7 @@ int makecert_context_output_private_key_file(MAKECERT_CONTEXT* context, char* pa
 	if (!filename)
 		return -1;
 
-	strcpy(filename, context->output_file);
-	strcpy(&filename[length], ".key");
+	sprintf_s(filename, length + 8, "%s.key", context->output_file);
 
 	if (path)
 		fullpath = GetCombinedPath(path, filename);
@@ -952,9 +952,7 @@ out_fail:
 	if (fp)
 		fclose(fp);
 
-	if (bio)
-		BIO_free(bio);
-
+	BIO_free_all(bio);
 	free(x509_str);
 	free(filename);
 	free(fullpath);
@@ -1174,7 +1172,7 @@ int makecert_context_process(MAKECERT_CONTEXT* context, int argc, char** argv)
 
 		if (status < 0)
 		{
-			BIO_free(bio);
+			BIO_free_all(bio);
 			return -1;
 		}
 
@@ -1183,7 +1181,7 @@ int makecert_context_process(MAKECERT_CONTEXT* context, int argc, char** argv)
 
 		if (!(x509_str = (BYTE*) malloc(length + 1)))
 		{
-			BIO_free(bio);
+			BIO_free_all(bio);
 			return -1;
 		}
 
@@ -1191,7 +1189,7 @@ int makecert_context_process(MAKECERT_CONTEXT* context, int argc, char** argv)
 
 		if (status < 0)
 		{
-			BIO_free(bio);
+			BIO_free_all(bio);
 			free(x509_str);
 			return -1;
 		}
@@ -1228,7 +1226,7 @@ int makecert_context_process(MAKECERT_CONTEXT* context, int argc, char** argv)
 		x509_str[length] = '\0';
 		printf("%s", x509_str);
 		free(x509_str);
-		BIO_free(bio);
+		BIO_free_all(bio);
 	}
 
 	/**

@@ -77,7 +77,7 @@ if ($ENV{BUILD_NUMBER})
 endif()
 set(WITH_LIBRARY_VERSIONING "ON")
 
-set(RAW_VERSTION_STRING "2.0.0-rc3")
+set(RAW_VERSTION_STRING "2.0.0-rc4")
 if(EXISTS "${CMAKE_SOURCE_DIR}/.source_tag")
 	file(READ ${CMAKE_SOURCE_DIR}/.source_tag RAW_VERSTION_STRING)
 elseif(USE_VERSION_FROM_GIT_TAG)
@@ -770,6 +770,10 @@ set(FAAC_FEATURE_TYPE "OPTIONAL")
 set(FAAC_FEATURE_PURPOSE "codec")
 set(FAAC_FEATURE_DESCRIPTION "FAAC AAC audio codec library")
 
+set(SOXR_FEATURE_TYPE "OPTIONAL")
+set(SOXR_FEATURE_PURPOSE "codec")
+set(SOXR_FEATURE_DESCRIPTION "SOX audio resample library")
+
 set(GSSAPI_FEATURE_TYPE "OPTIONAL")
 set(GSSAPI_FEATURE_PURPOSE "auth")
 set(GSSAPI_FEATURE_DESCRIPTION "add kerberos support")
@@ -873,13 +877,41 @@ find_feature(GSM ${GSM_FEATURE_TYPE} ${GSM_FEATURE_PURPOSE} ${GSM_FEATURE_DESCRI
 find_feature(LAME ${LAME_FEATURE_TYPE} ${LAME_FEATURE_PURPOSE} ${LAME_FEATURE_DESCRIPTION})
 find_feature(FAAD2 ${FAAD2_FEATURE_TYPE} ${FAAD2_FEATURE_PURPOSE} ${FAAD2_FEATURE_DESCRIPTION})
 find_feature(FAAC ${FAAC_FEATURE_TYPE} ${FAAC_FEATURE_PURPOSE} ${FAAC_FEATURE_DESCRIPTION})
+find_feature(soxr ${SOXR_FEATURE_TYPE} ${SOXR_FEATURE_PURPOSE} ${SOXR_FEATURE_DESCRIPTION})
 
 find_feature(GSSAPI ${GSSAPI_FEATURE_TYPE} ${GSSAPI_FEATURE_PURPOSE} ${GSSAPI_FEATURE_DESCRIPTION})
 
-if (WITH_FFMPEG AND NOT FFMPEG_FOUND)
+if ((WITH_FFMPEG OR WITH_DSP_FFMPEG) AND NOT FFMPEG_FOUND)
 	message(FATAL_ERROR "FFMPEG support requested but not detected")
 endif()
 set(WITH_FFMPEG ${FFMPEG_FOUND})
+
+# Version check, if we have detected FFMPEG but the version is too old
+# deactivate it as sound backend.
+if (WITH_DSP_FFMPEG)
+	# Deactivate FFmpeg backend for sound, if the version is too old.
+	# See libfreerdp/codec/dsp_ffmpeg.h
+	file(STRINGS "${AVCODEC_INCLUDE_DIR}/libavcodec/version.h" AV_VERSION_FILE REGEX "LIBAVCODEC_VERSION_M[A-Z]+[\t ]*[0-9]+")
+	FOREACH(item ${AV_VERSION_FILE})
+	  STRING(REGEX MATCH "LIBAVCODEC_VERSION_M[A-Z]+[\t ]*[0-9]+" litem ${item})
+	IF(litem)
+			string(REGEX REPLACE "[ \t]+" ";" VSPLIT_LINE ${litem})
+			list(LENGTH VSPLIT_LINE VSPLIT_LINE_LEN)
+			if (NOT "${VSPLIT_LINE_LEN}" EQUAL "2")
+				message(ERROR "invalid entry in libavcodec version header ${item}")
+			endif(NOT "${VSPLIT_LINE_LEN}" EQUAL "2")
+			list(GET VSPLIT_LINE 0 VNAME)
+			list(GET VSPLIT_LINE 1 VVALUE)
+			set(${VNAME} ${VVALUE})
+	ENDIF(litem)
+	ENDFOREACH(item ${AV_VERSION_FILE})
+
+	set(AVCODEC_VERSION "${LIBAVCODEC_VERSION_MAJOR}.${LIBAVCODEC_VERSION_MINOR}.${LIBAVCODEC_VERSION_MICRO}")
+	if (AVCODEC_VERSION VERSION_LESS "57.48.101")
+		message(WARNING "FFmpeg version detected (${AVCODEC_VERSION}) is too old. (Require at least 57.48.101 for sound). Deactivating")
+		set(WITH_DSP_FFMPEG OFF)
+	endif()
+endif (WITH_DSP_FFMPEG)
 
 if (WITH_OPENH264 AND NOT OPENH264_FOUND)
 	message(FATAL_ERROR "OpenH264 support requested but not detected")
@@ -1008,6 +1040,10 @@ if (${CMAKE_VERSION} VERSION_LESS 2.8.12)
 else()
 	set(PUBLIC_KEYWORD "PUBLIC")
 	set(PRIVATE_KEYWORD "PRIVATE")
+endif()
+
+if(BUILD_SHARED_LIBS)
+	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DWINPR_DLL")
 endif()
 
 add_subdirectory(winpr)

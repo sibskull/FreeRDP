@@ -85,9 +85,7 @@ struct _AUDIN_PLUGIN
 	AUDIN_LISTENER_CALLBACK* listener_callback;
 
 	/* Parsed plugin data */
-	UINT16 fixed_format;
-	UINT16 fixed_channel;
-	UINT32 fixed_rate;
+	AUDIO_FORMAT* fixed_format;
 	char* subsystem;
 	char* device_name;
 
@@ -146,6 +144,16 @@ static UINT audin_process_version(AUDIN_PLUGIN* audin, AUDIN_CHANNEL_CALLBACK* c
 	Stream_Read_UINT32(s, ServerVersion);
 	WLog_Print(audin->log, WLOG_DEBUG, "ServerVersion=%"PRIu32", ClientVersion=%"PRIu32, ServerVersion,
 	           ClientVersion);
+
+	/* Do not answer server packet, we do not support the channel version. */
+	if (ServerVersion != ClientVersion)
+	{
+		WLog_Print(audin->log, WLOG_WARN,
+		           "Incompatible channel version server=%"PRIu32", client supports version=%"PRIu32, ServerVersion,
+		           ClientVersion);
+		return CHANNEL_RC_OK;
+	}
+
 	out = Stream_New(NULL, 5);
 
 	if (!out)
@@ -200,7 +208,7 @@ static UINT audin_process_formats(AUDIN_PLUGIN* audin, AUDIN_CHANNEL_CALLBACK* c
 	}
 
 	Stream_Seek_UINT32(s); /* cbSizeFormatsPacket */
-	callback->formats = (AUDIO_FORMAT*) calloc(NumFormats, sizeof(AUDIO_FORMAT));
+	callback->formats = audio_formats_new(NumFormats);
 
 	if (!callback->formats)
 	{
@@ -224,42 +232,17 @@ static UINT audin_process_formats(AUDIN_PLUGIN* audin, AUDIN_CHANNEL_CALLBACK* c
 	{
 		AUDIO_FORMAT format = { 0 };
 
-		if (Stream_GetRemainingLength(s) < 18)
-			return ERROR_INVALID_DATA;
-
-		Stream_Read_UINT16(s, format.wFormatTag);
-		Stream_Read_UINT16(s, format.nChannels);
-		Stream_Read_UINT32(s, format.nSamplesPerSec);
-		Stream_Read_UINT32(s, format.nAvgBytesPerSec);
-		Stream_Read_UINT16(s, format.nBlockAlign);
-		Stream_Read_UINT16(s, format.wBitsPerSample);
-		Stream_Read_UINT16(s, format.cbSize);
-
-		if (Stream_GetRemainingLength(s) < format.cbSize)
-			return ERROR_INVALID_DATA;
-
-		if (format.cbSize > 0)
+		if (!audio_format_read(s, &format))
 		{
-			format.data = malloc(format.cbSize);
-
-			if (!format.data)
-				return ERROR_OUTOFMEMORY;
-
-			memcpy(format.data, Stream_Pointer(s), format.cbSize);
-			Stream_Seek(s, format.cbSize);
+			error = ERROR_INVALID_DATA;
+			goto out;
 		}
 
-		WLog_Print(audin->log, WLOG_DEBUG,
-		           "wFormatTag=%s nChannels=%"PRIu16" nSamplesPerSec=%"PRIu32" "
-		           "nBlockAlign=%"PRIu16" wBitsPerSample=%"PRIu16" cbSize=%"PRIu16"",
-		           rdpsnd_get_audio_tag_string(format.wFormatTag), format.nChannels, format.nSamplesPerSec,
-		           format.nBlockAlign, format.wBitsPerSample, format.cbSize);
+		audio_format_print(audin->log, WLOG_DEBUG, &format);
 
-		if ((audin->fixed_format > 0 && audin->fixed_format != format.wFormatTag) ||
-		    (audin->fixed_channel > 0 && audin->fixed_channel != format.nChannels) ||
-		    (audin->fixed_rate > 0 && audin->fixed_rate != format.nSamplesPerSec))
+		if (!audio_format_compatible(audin->fixed_format, &format))
 		{
-			free(format.data);
+			audio_format_free(&format);
 			continue;
 		}
 
@@ -269,20 +252,16 @@ static UINT audin_process_formats(AUDIN_PLUGIN* audin, AUDIN_CHANNEL_CALLBACK* c
 			/* Store the agreed format in the corresponding index */
 			callback->formats[callback->formats_count++] = format;
 
-			/* Put the format to output buffer */
-			if (!Stream_EnsureRemainingCapacity(out, 18 + format.cbSize))
+			if (!audio_format_write(out, &format))
 			{
 				error = CHANNEL_RC_NO_MEMORY;
 				WLog_Print(audin->log, WLOG_ERROR, "Stream_EnsureRemainingCapacity failed!");
 				goto out;
 			}
-
-			Stream_Write(out, &format, 18);
-			Stream_Write(out, format.data, format.cbSize);
 		}
 		else
 		{
-			free(format.data);
+			audio_format_free(&format);
 		}
 	}
 
@@ -298,23 +277,16 @@ static UINT audin_process_formats(AUDIN_PLUGIN* audin, AUDIN_CHANNEL_CALLBACK* c
 	Stream_Write_UINT32(out, callback->formats_count); /* NumFormats (4 bytes) */
 	Stream_Write_UINT32(out, cbSizeFormatsPacket); /* cbSizeFormatsPacket (4 bytes) */
 	Stream_SetPosition(out, cbSizeFormatsPacket);
-	error = audin_channel_write_and_free(callback, out, TRUE);
+	error = audin_channel_write_and_free(callback, out, FALSE);
 out:
 
 	if (error != CHANNEL_RC_OK)
 	{
-		size_t x;
-
-		if (callback->formats)
-		{
-			for (x = 0; x < NumFormats; x++)
-				free(callback->formats[x].data);
-
-			free(callback->formats);
-			callback->formats = NULL;
-		}
+		audio_formats_free(callback->formats, NumFormats);
+		callback->formats = NULL;
 	}
 
+	Stream_Free(out, TRUE);
 	return error;
 }
 
@@ -369,6 +341,7 @@ static UINT audin_receive_wave_data(const AUDIO_FORMAT* format,
                                     const BYTE* data, size_t size, void* user_data)
 {
 	UINT error;
+	BOOL compatible;
 	AUDIN_PLUGIN* audin;
 	AUDIN_CHANNEL_CALLBACK* callback = (AUDIN_CHANNEL_CALLBACK*) user_data;
 
@@ -390,7 +363,8 @@ static UINT audin_receive_wave_data(const AUDIO_FORMAT* format,
 
 	Stream_Write_UINT8(audin->data, MSG_SNDIN_DATA);
 
-	if (audin->device->FormatSupported(audin->device, audin->format))
+	compatible = audio_format_compatible(format, audin->format);
+	if (compatible && audin->device->FormatSupported(audin->device, audin->format))
 	{
 		if (!Stream_EnsureRemainingCapacity(audin->data, size))
 			return CHANNEL_RC_NO_MEMORY;
@@ -407,12 +381,8 @@ static UINT audin_receive_wave_data(const AUDIO_FORMAT* format,
 	if (Stream_GetPosition(audin->data) <= 1)
 		return CHANNEL_RC_OK;
 
-	WLog_Print(audin->log, WLOG_TRACE,
-	           "%s: nChannels: %"PRIu16" nSamplesPerSec: %"PRIu32" "
-	           "nAvgBytesPerSec: %"PRIu32" nBlockAlign: %"PRIu16" wBitsPerSample: %"PRIu16" cbSize: %"PRIu16" [%"PRIdz"/%"PRIdz"]",
-	           rdpsnd_get_audio_tag_string(audin->format->wFormatTag),
-	           audin->format->nChannels, audin->format->nSamplesPerSec, audin->format->nAvgBytesPerSec,
-	           audin->format->nBlockAlign, audin->format->wBitsPerSample, audin->format->cbSize, size,
+	audio_format_print(audin->log, WLOG_TRACE, audin->format);
+	WLog_Print(audin->log, WLOG_TRACE, "[%"PRIdz"/%"PRIdz"]", size,
 	           Stream_GetPosition(audin->data) - 1);
 
 	if ((error = audin_send_incoming_data_pdu(callback)))
@@ -436,12 +406,35 @@ static BOOL audin_open_device(AUDIN_PLUGIN* audin, AUDIN_CHANNEL_CALLBACK* callb
 	format = *audin->format;
 	supported = IFCALLRESULT(FALSE, audin->device->FormatSupported, audin->device, &format);
 	WLog_Print(audin->log, WLOG_DEBUG, "microphone uses %s codec",
-	           rdpsnd_get_audio_tag_string(format.wFormatTag));
+	           audio_format_get_tag_string(format.wFormatTag));
 
 	if (!supported)
 	{
+		/* Default sample rates supported by most backends. */
+		const UINT32 samplerates[] = {
+		    96000,
+		    48000,
+		    44100,
+		    22050
+		};
+		BOOL test = FALSE;
+
 		format.wFormatTag = WAVE_FORMAT_PCM;
 		format.wBitsPerSample = 16;
+		test = IFCALLRESULT(FALSE, audin->device->FormatSupported, audin->device, &format);
+		if (!test)
+		{
+			size_t x;
+			for (x=0; x<ARRAYSIZE(samplerates); x++)
+			{
+				format.nSamplesPerSec = samplerates[x];
+				test = IFCALLRESULT(FALSE, audin->device->FormatSupported, audin->device, &format);
+				if (test)
+					break;
+			}
+		}
+		if (!test)
+			return FALSE;
 	}
 
 	IFCALLRET(audin->device->SetFormat, error,
@@ -621,7 +614,6 @@ static UINT audin_on_data_received(IWTSVirtualChannelCallback* pChannelCallback,
  */
 static UINT audin_on_close(IWTSVirtualChannelCallback* pChannelCallback)
 {
-	size_t x;
 	AUDIN_CHANNEL_CALLBACK* callback = (AUDIN_CHANNEL_CALLBACK*) pChannelCallback;
 	AUDIN_PLUGIN* audin = (AUDIN_PLUGIN*) callback->plugin;
 	UINT error = CHANNEL_RC_OK;
@@ -636,18 +628,7 @@ static UINT audin_on_close(IWTSVirtualChannelCallback* pChannelCallback)
 	}
 
 	audin->format = NULL;
-
-	if (callback->formats)
-	{
-		for (x = 0; x < callback->formats_count; x++)
-		{
-			AUDIO_FORMAT* format = &callback->formats[x];
-			free(format->data);
-		}
-
-		free(callback->formats);
-	}
-
+	audio_formats_free(callback->formats, callback->formats_count);
 	free(callback);
 	return error;
 }
@@ -732,6 +713,7 @@ static UINT audin_plugin_terminated(IWTSPlugin* pPlugin)
 		return CHANNEL_RC_BAD_CHANNEL_HANDLE;
 
 	WLog_Print(audin->log, WLOG_TRACE, "...");
+	audio_format_free(audin->fixed_format);
 
 	if (audin->device)
 	{
@@ -859,7 +841,7 @@ static UINT audin_set_subsystem(AUDIN_PLUGIN* audin, const char* subsystem)
  *
  * @return 0 on success, otherwise a Win32 error code
  */
-static UINT audin_set_device_name(AUDIN_PLUGIN* audin, char* device_name)
+static UINT audin_set_device_name(AUDIN_PLUGIN* audin, const char* device_name)
 {
 	free(audin->device_name);
 	audin->device_name = _strdup(device_name);
@@ -932,7 +914,7 @@ BOOL audin_process_addin_args(AUDIN_PLUGIN* audin, ADDIN_ARGV* args)
 			if ((errno != 0) || (val > UINT16_MAX))
 				return FALSE;
 
-			audin->fixed_format = val;
+			audin->fixed_format->wFormatTag = val;
 		}
 		CommandLineSwitchCase(arg, "rate")
 		{
@@ -941,14 +923,14 @@ BOOL audin_process_addin_args(AUDIN_PLUGIN* audin, ADDIN_ARGV* args)
 			if ((errno != 0) || (val < INT32_MIN) || (val > INT32_MAX))
 				return FALSE;
 
-			audin->fixed_rate = val;
+			audin->fixed_format->nSamplesPerSec = val;
 		}
 		CommandLineSwitchCase(arg, "channel")
 		{
 			unsigned long val = strtoul(arg->Value, NULL, 0);
 
 			if ((errno != 0) || (val > UINT16_MAX))
-				audin->fixed_channel = val;
+				audin->fixed_format->nChannels = val;
 		}
 		CommandLineSwitchDefault(arg)
 		{
@@ -1021,6 +1003,10 @@ UINT DVCPluginEntry(IDRDYNVC_ENTRY_POINTS* pEntryPoints)
 
 	audin->log = WLog_Get(TAG);
 	audin->data = Stream_New(NULL, 4096);
+	audin->fixed_format = audio_format_new();
+
+	if (!audin->fixed_format)
+		goto out;
 
 	if (!audin->data)
 		goto out;
