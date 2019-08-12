@@ -1,4 +1,5 @@
-%def_without ffmpeg
+%def_with ffmpeg
+# X264 backend not implemented, please review your configuration!
 %def_without x264
 %def_without directfb
 # see https://github.com/FreeRDP/FreeRDP/issues/4348
@@ -20,7 +21,8 @@ Requires: xfreerdp = %EVR
 Requires: wlfreerdp = %EVR
 Requires: %name-plugins-standard = %EVR
 
-BuildRequires: cmake gcc-c++
+BuildRequires(pre): cmake
+BuildRequires: gcc-c++
 BuildRequires: docbook-style-xsl git-core xmlto libpcre-devel
 BuildRequires: pkgconfig(alsa)
 BuildRequires: pkgconfig(libpcsclite)
@@ -44,9 +46,18 @@ BuildRequires: pkgconfig(gstreamer-plugins-base-1.0)
 BuildRequires: pkgconfig(libpulse)
 %{?_with_directfb:BuildRequires: pkgconfig(directfb)}
 BuildRequires: libcups-devel libjpeg-devel zlib-devel
-%{?_with_ffmpeg:BuildRequires: libavcodec-devel libavutil-devel}
+%{?_with_ffmpeg:BuildRequires: libavcodec-devel libavutil-devel libavresample-devel libswresample-devel}
 %{?_with_x264:BuildRequires: libx264-devel}
 BuildRequires: libkrb5-devel
+BuildRequires: wayland-devel
+BuildRequires: libmbedtls-devel
+BuildRequires: libgsm-devel
+BuildRequires: liblame-devel
+BuildRequires: libfaad-devel
+BuildRequires: libfaac-devel
+BuildRequires: libsoxr-devel
+BuildRequires: libffi-devel
+BuildRequires: liborc-devel
 
 %description
 freerdp implements Remote Desktop Protocol (RDP), used in a number of Microsoft
@@ -58,7 +69,6 @@ This is metapackage.
 %package -n xfreerdp
 Summary: Remote Desktop Protocol client
 Group: Networking/Remote access
-#Requires: %name-plugins-standard
 Requires: lib%name = %EVR
 
 %description -n xfreerdp
@@ -82,7 +92,6 @@ This package contains DirectFB UI.
 %package -n wlfreerdp
 Summary: Remote Desktop Protocol client
 Group: Networking/Remote access
-#Requires: %name-plugins-standard
 Requires: lib%name = %EVR
 
 %description -n wlfreerdp
@@ -185,25 +194,35 @@ the RDP protocol.
     -DWITH_CLIENT=ON \
     %{?_without_directfb:-DWITH_DIRECTFB=OFF} \
     %{?_without_ffmpeg:-DWITH_FFMPEG=OFF} \
-    %{?_without_x264:-DWITH_X264=OFF} \
-    -DWITH_GSM=OFF \
+%if_with x264
+    -DWITH_X264=ON \
+%else
+    -DWITH_X264=OFF \
+%endif
+    -DWITH_GSM=ON \
     %{?_without_gss:-DWITH_GSSAPI=OFF} \
+    -DWITH_FAAC=ON \
+    -DWITH_FAAD2=ON \
     -DWITH_GSTREAMER_1_0=ON \
     -DWITH_IPP=OFF \
     -DWITH_JPEG=ON \
+    -DWITH_LAME=ON \
     -DWITH_LIBRARY_VERSIONING=ON \
     -DWITH_MANPAGES=ON \
+    -DWITH_MBEDTLS=ON \
+    -DWITH_OPENH264=OFF \
     -DWITH_OPENSSL=ON \
     -DWITH_PCSC=ON \
     -DWITH_PULSE=ON \
     -DWITH_SERVER=ON \
+    -DWITH_SOXR=ON \
     -DWITH_WAYLAND=ON \
     -DWITH_X11=ON \
     -DWITH_XCURSOR=ON \
     -DWITH_XEXT=ON \
-    -DWITH_XKBFILE=ON \
     -DWITH_XI=ON \
     -DWITH_XINERAMA=ON \
+    -DWITH_XKBFILE=ON \
     -DWITH_XRENDER=ON \
     -DWITH_XV=ON \
     -DWITH_ZLIB=ON \
@@ -295,6 +314,7 @@ ln -s freerdp2.pc %buildroot%_pkgconfigdir/freerdp.pc
 * Mon Aug 12 2019 Andrey Cherepanov <cas@altlinux.org> 2.0.0-alt3.git20190806
 - New snapshot from upstream git repository.
 - Build from upstream git.
+- Enable support of ffmpeg, wayland, mbedtls, gsm, lame, faad, faac, soxr.
 
 * Sat Jun 22 2019 Igor Vlasenko <viy@altlinux.ru> 2.0.0-alt2.git20181120
 - NMU: remove rpm-build-ubt from BR:
