@@ -1,5 +1,1 @@
-tar: .
-copy?: altlinux/*
-spec: .gear/freerdp.spec
-copy?: .gear/*.patch
-
+tar: sources:.
