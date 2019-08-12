@@ -272,7 +272,7 @@ ln -s freerdp2.pc %buildroot%_pkgconfigdir/freerdp.pc
 %_man1dir/freerdp-shadow-cli.*
 
 %files -n lib%name
-%doc LICENSE README ChangeLog
+%doc LICENSE README.md ChangeLog
 %_libdir/lib%{name}2.so.*
 %_libdir/lib%{name}-client2.so.*
 %dir %_libdir/freerdp*
