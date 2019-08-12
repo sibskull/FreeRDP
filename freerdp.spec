@@ -6,7 +6,7 @@
 
 Name: freerdp
 Version: 2.0.0
-Release: alt2.git20181120
+Release: alt3.git20190806
 
 Group: Networking/Remote access
 Summary: Remote Desktop Protocol functionality
@@ -292,6 +292,10 @@ ln -s freerdp2.pc %buildroot%_pkgconfigdir/freerdp.pc
 %_pkgconfigdir/freerdp*.pc
 
 %changelog
+* Mon Aug 12 2019 Andrey Cherepanov <cas@altlinux.org> 2.0.0-alt3.git20190806
+- New snapshot from upstream git repository.
+- Build from upstream git.
+
 * Sat Jun 22 2019 Igor Vlasenko <viy@altlinux.ru> 2.0.0-alt2.git20181120
 - NMU: remove rpm-build-ubt from BR:
 
