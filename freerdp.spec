@@ -327,14 +327,14 @@ ln -s freerdp2.pc %buildroot%_pkgconfigdir/freerdp.pc
 * Thu Aug 30 2018 Grigory Ustinov <grenka@altlinux.org> 2.0.0-alt1.git20180801.S1.1
 - NMU: Rebuild with new openssl 1.1.0.
 
-* Thu Aug 02 2018 Pavel Nakonechnyi <zorg@altlinux.org> 2.0.0-alt1.git20180801%ubt
+* Thu Aug 02 2018 Pavel Nakonechnyi <zorg@altlinux.org> 2.0.0-alt1.git20180801.S1
 - Fourth release candidate for 2.0.0
 
-* Tue Apr 17 2018 Pavel Nakonechnyi <zorg@altlinux.org> 2.0.0-alt1.git20180411%ubt
+* Tue Apr 17 2018 Pavel Nakonechnyi <zorg@altlinux.org> 2.0.0-alt1.git20180411.S1
 - Third release candidate for 2.0.0
 - Fix gstreamer-1.0 detection is not needed now
 
-* Tue Sep 26 2017 Alexey Shabalin <shaba@altlinux.ru> 2.0.0-alt1.git20170724%ubt
+* Tue Sep 26 2017 Alexey Shabalin <shaba@altlinux.ru> 2.0.0-alt1.git20170724.S1
 - Fix gstreamer-1.0 detection
 - increase release number for allow backport to p8
 
