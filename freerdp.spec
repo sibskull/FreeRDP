@@ -253,6 +253,7 @@ ln -s freerdp2.pc %buildroot%_pkgconfigdir/freerdp.pc
 
 %files -n xfreerdp
 %_bindir/xfreerdp
+%_bindir/freerdp-proxy
 %_man1dir/xfreerdp*
 %_bindir/winpr-*
 %_man1dir/winpr-*
