@@ -1,1 +1,1 @@
-tar: sources:.
+tar: @version@:.

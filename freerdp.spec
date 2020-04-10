@@ -7,7 +7,7 @@
 
 Name: freerdp
 Version: 2.0.0
-Release: alt4.git20190806
+Release: alt5
 
 Group: Networking/Remote access
 Summary: Remote Desktop Protocol functionality
@@ -335,6 +335,9 @@ ln -s freerdp2.pc %buildroot%_pkgconfigdir/freerdp.pc
 %_pkgconfigdir/freerdp*.pc
 
 %changelog
+* Fri Apr 10 2020 Andrey Cherepanov <cas@altlinux.org> 2.0.0-alt5
+- New version (2.0.0).
+
 * Wed Nov 20 2019 Andrey Cherepanov <cas@altlinux.org> 2.0.0-alt4.git20190806
 - Enable support of icu and vaapi.
 - Build liburbdrc-client.so (ALT #34230).
