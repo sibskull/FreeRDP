@@ -70,6 +70,7 @@ BuildRequires: libuuid-devel
 BuildRequires: libudev-devel
 BuildRequires: libusb-devel
 BuildRequires: libdbus-glib-devel
+BuildRequires: patchelf
 
 %description
 freerdp implements Remote Desktop Protocol (RDP), used in a number of Microsoft
@@ -270,6 +271,9 @@ rm -f %buildroot%_libdir/*.a \
 
 # workaround, add compat
 ln -s freerdp2.pc %buildroot%_pkgconfigdir/freerdp.pc
+
+# Set rpath to %_libdir/freerdp2 for freerdp-proxy executable
+patchelf --set-rpath %_libdir/freerdp2 %buildroot%_bindir/freerdp-proxy
 
 %files
 
