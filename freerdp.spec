@@ -216,7 +216,7 @@ the RDP protocol.
     -DWITH_X264=OFF \
 %endif
     -DWITH_GSM=ON \
-    %{?_without_gss:-DWITH_GSSAPI=OFF} \
+    %{?_without_gss:-DWITH_KERBEROS=OFF} \
     -DWITH_FAAC=ON \
     -DWITH_FAAD2=ON \
     -DWITH_GSTREAMER_1_0=ON \
