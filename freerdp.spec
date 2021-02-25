@@ -6,7 +6,7 @@
 %def_without gss
 
 Name: freerdp
-Version: 2.2.0
+Version: 2.3.0
 Release: alt1
 
 Group: Networking/Remote access
@@ -339,6 +339,9 @@ patchelf --set-rpath %_libdir/freerdp2 %buildroot%_bindir/freerdp-proxy
 %_pkgconfigdir/freerdp*.pc
 
 %changelog
+* Thu Feb 25 2021 Andrey Cherepanov <cas@altlinux.org> 2.3.0-alt1
+- New version.
+
 * Tue Jul 21 2020 Andrey Cherepanov <cas@altlinux.org> 2.2.0-alt1
 - New version.
 - Fixes:
