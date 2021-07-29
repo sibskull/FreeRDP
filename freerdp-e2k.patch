@@ -1,0 +1,25 @@
+diff --git a/winpr/libwinpr/sysinfo/sysinfo.c b/winpr/libwinpr/sysinfo/sysinfo.c
+index dd15bb3..213b53e 100644
+--- a/winpr/libwinpr/sysinfo/sysinfo.c
++++ b/winpr/libwinpr/sysinfo/sysinfo.c
+@@ -711,6 +711,20 @@ BOOL IsProcessorFeaturePresent(DWORD ProcessorFeature)
+ 			return FALSE;
+ 	}
+ 
++#elif __e2k__
++
++	switch (ProcessorFeature)
++	{
++		case PF_MMX_INSTRUCTIONS_AVAILABLE:
++		case PF_XMMI_INSTRUCTIONS_AVAILABLE: /* SSE */
++		case PF_XMMI64_INSTRUCTIONS_AVAILABLE: /* SSE2 */
++		case PF_SSE3_INSTRUCTIONS_AVAILABLE:
++			return TRUE;
++
++		default:
++			break;
++	}
++
+ #elif defined(_M_ARM)
+ #ifdef __linux__
+ 	const unsigned caps = GetARMCPUCaps();
