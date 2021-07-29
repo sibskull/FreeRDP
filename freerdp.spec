@@ -8,7 +8,7 @@
 
 Name: freerdp
 Version: 2.3.2
-Release: alt2
+Release: alt3
 
 Group: Networking/Remote access
 Summary: Remote Desktop Protocol functionality
@@ -360,6 +360,9 @@ popd
 %_pkgconfigdir/freerdp*.pc
 
 %changelog
+* Thu Jul 29 2021 Ilya Kurdyukov <ilyakurdyukov@altlinux.org> 2.3.2-alt3
+- Fixed build for Elbrus.
+
 * Thu Jul 08 2021 Andrey Cherepanov <cas@altlinux.org> 2.3.2-alt2
 - FTBFS: disable build with mbedtls-3.0.0 (https://github.com/FreeRDP/FreeRDP/issues/7163).
 
