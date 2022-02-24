@@ -296,6 +296,9 @@ pushd %_cmake__builddir/server/proxy
 popd
 %endif
 
+# Set rpath to library
+patchelf --set-rpath '$ORIGIN' %buildroot%_libdir/freerdp2/liburbdrc-client-libusb.so
+
 %files
 
 %files -n xfreerdp
