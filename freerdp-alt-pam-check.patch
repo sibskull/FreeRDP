@@ -1,0 +1,55 @@
+diff --git a/server/shadow/X11/x11_shadow.c b/server/shadow/X11/x11_shadow.c
+index e6a67b15d..924a8f415 100644
+--- a/server/shadow/X11/x11_shadow.c
++++ b/server/shadow/X11/x11_shadow.c
+@@ -23,6 +23,7 @@
+ #include <stdlib.h>
+ #include <string.h>
+ #include <unistd.h>
++#include <grp.h>
+ 
+ #include <sys/ipc.h>
+ #include <sys/shm.h>
+@@ -158,6 +159,8 @@ static int x11_shadow_pam_authenticate(rdpShadowSubsystem* subsystem, rdpShadowC
+ 	SHADOW_PAM_AUTH_INFO info = { 0 };
+ 	WINPR_UNUSED(subsystem);
+ 	WINPR_UNUSED(client);
++    struct group *eff_group;
++    int real_gid, init_eff_gid, re;
+ 
+ 	if (!x11_shadow_pam_get_service_name(&info))
+ 		return -1;
+@@ -175,21 +178,26 @@ static int x11_shadow_pam_authenticate(rdpShadowSubsystem* subsystem, rdpShadowC
+ 		return -1;
+ 	}
+ 
++	/* setegid with group chkpwd to check passwords by pam_tcb */
++	real_gid = getgid();
++	eff_group = getgrnam("chkpwd");
++	if (eff_group != NULL) {
++		init_eff_gid = eff_group->gr_gid;
++		re = setegid(init_eff_gid);
++		if (re == -1)
++			WLog_ERR(TAG, "pam_authenticate setegid(%d) failed", init_eff_gid);
++	}
++
+ 	pam_status = pam_authenticate(info.handle, 0);
+ 
+ 	if (pam_status != PAM_SUCCESS)
+ 	{
++		setegid(real_gid);
+ 		WLog_ERR(TAG, "pam_authenticate failure: %s", pam_strerror(info.handle, pam_status));
+ 		return -1;
+ 	}
+ 
+-	pam_status = pam_acct_mgmt(info.handle, 0);
+-
+-	if (pam_status != PAM_SUCCESS)
+-	{
+-		WLog_ERR(TAG, "pam_acct_mgmt failure: %s", pam_strerror(info.handle, pam_status));
+-		return -1;
+-	}
++	setegid(real_gid);
+ 
+ 	return 1;
+ }
