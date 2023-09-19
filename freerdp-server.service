@@ -1,0 +1,9 @@
+[Unit]
+Description=Remote access to desktop via RDP
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/freerdp-shadow-cli
+
+[Install]
+WantedBy=graphical-session.target
