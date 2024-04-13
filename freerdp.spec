@@ -8,7 +8,7 @@
 
 Name: freerdp
 Version: 2.11.5
-Release: alt1
+Release: alt2
 
 Group: Networking/Remote access
 Summary: Remote Desktop Protocol functionality
@@ -392,6 +392,16 @@ install -Dpm0755 %SOURCE3 %buildroot%_sysconfdir/freerdp/freerdp-logout.sh
 %_pkgconfigdir/freerdp*.pc
 
 %changelog
+* Sat Apr 13 2024 Andrey Cherepanov <cas@altlinux.org> 2.11.5-alt2
+- freerdp-shadow-cli: added /on-connect and /on-disconnect scripts support.
+  Usage: freerdp-shadow-cli \
+           /on-connect:/etc/freerdp/freerdp-login.sh \
+           /on-disconnect:/etc/freerdp/freerdp-logout.sh
+
+  All monitors and input devices on server are disabled upon user login.
+  All monitors and input devices on server are enabled upon user
+  disconnecting.
+
 * Sun Feb 11 2024 Andrey Cherepanov <cas@altlinux.org> 2.11.5-alt1
 - New version.
 
