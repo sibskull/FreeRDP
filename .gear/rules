@@ -1,3 +1,4 @@
 tar: @version@:.
 copy: *.patch
 copy: *.service
+copy: *.sh

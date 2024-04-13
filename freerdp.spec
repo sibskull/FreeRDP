@@ -18,6 +18,8 @@ Packager: Andrey Cherepanov <cas@altlinux.org>
 
 Source: %name-%version.tar
 Source1: freerdp-server.service
+Source2: freerdp-login.sh
+Source3: freerdp-logout.sh
 Patch0: %name-alt-pam-check.patch
 Patch1: %name-alt-connection-scripts.patch
 Patch2000: %name-e2k.patch
@@ -319,6 +321,10 @@ $setrpath '$ORIGIN' %buildroot%_libdir/freerdp2/liburbdrc-client-libusb.so
 # Install freerdp-server.service
 install -Dpm0644 %SOURCE1 %buildroot%_libexecdir/systemd/user/freerdp-server.service
 
+# Install connection scripts
+install -Dpm0755 %SOURCE2 %buildroot%_sysconfdir/freerdp/freerdp-login.sh
+install -Dpm0755 %SOURCE3 %buildroot%_sysconfdir/freerdp/freerdp-logout.sh
+
 %files
 
 %files -n xfreerdp
@@ -339,6 +345,8 @@ install -Dpm0644 %SOURCE1 %buildroot%_libexecdir/systemd/user/freerdp-server.ser
 %files server
 %_bindir/freerdp-proxy
 %config(noreplace) %_libexecdir/systemd/user/freerdp-server.service
+%config(noreplace) %attr(0755, root, root) %_sysconfdir/freerdp/freerdp-login.sh
+%config(noreplace) %attr(0755, root, root) %_sysconfdir/freerdp/freerdp-logout.sh
 %attr(2711, root, chkpwd) %_bindir/freerdp-shadow-cli
 %_man1dir/freerdp-shadow-cli.*
 
