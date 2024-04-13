@@ -1,0 +1,160 @@
+diff --git a/include/freerdp/settings.h b/include/freerdp/settings.h
+index 76f195199..d5688b5e9 100644
+--- a/include/freerdp/settings.h
++++ b/include/freerdp/settings.h
+@@ -661,6 +661,8 @@ typedef struct _RDPDR_PARALLEL RDPDR_PARALLEL;
+ #define FreeRDP_TlsSecLevel (1105)
+ #define FreeRDP_TLSMinVersion (1106)
+ #define FreeRDP_TLSMaxVersion (1107)
++#define FreeRDP_OnConnectScript (1110)
++#define FreeRDP_OnDisconnectScript (1111)
+ #define FreeRDP_MstscCookieMode (1152)
+ #define FreeRDP_CookieMaxLength (1153)
+ #define FreeRDP_PreconnectionId (1154)
+@@ -1121,6 +1123,8 @@ struct rdp_settings
+ 	ALIGN64 UINT16 TLSMinVersion;              /* 1106 */
+ 	ALIGN64 UINT16 TLSMaxVersion;              /* 1107 */
+ 	UINT64 padding1152[1152 - 1108];           /* 1108 */
++	ALIGN64 char* OnConnectScript;             /* 1110 */
++	ALIGN64 char* OnDisconnectScript;          /* 1111 */
+ 
+ 	/* Connection Cookie */
+ 	ALIGN64 BOOL MstscCookieMode;      /* 1152 */
+diff --git a/libfreerdp/common/settings_getters.c b/libfreerdp/common/settings_getters.c
+index 8df8957c6..459d67b3e 100644
+--- a/libfreerdp/common/settings_getters.c
++++ b/libfreerdp/common/settings_getters.c
+@@ -2302,6 +2302,12 @@ const char* freerdp_settings_get_string(const rdpSettings* settings, size_t id)
+ 		case FreeRDP_NtlmSamFile:
+ 			return settings->NtlmSamFile;
+ 
++		case FreeRDP_OnConnectScript:
++			return settings->OnConnectScript;
++
++		case FreeRDP_OnDisconnectScript:
++			return settings->OnDisconnectScript;
++
+ 		case FreeRDP_Password:
+ 			return settings->Password;
+ 
+@@ -2615,6 +2621,18 @@ BOOL freerdp_settings_set_string_(rdpSettings* settings, size_t id, const char*
+ 			settings->NtlmSamFile = (val ? _strdup(val) : NULL);
+ 			return (!val || settings->NtlmSamFile != NULL);
+ 
++		case FreeRDP_OnConnectScript:
++			if (cleanup)
++				free(settings->OnConnectScript);
++			settings->OnConnectScript = (val ? _strdup(val) : NULL);
++			return (!val || settings->OnConnectScript != NULL);
++
++		case FreeRDP_OnDisconnectScript:
++			if (cleanup)
++				free(settings->OnDisconnectScript);
++			settings->OnDisconnectScript = (val ? _strdup(val) : NULL);
++			return (!val || settings->OnDisconnectScript != NULL);
++
+ 		case FreeRDP_Password:
+ 			if (cleanup)
+ 				free(settings->Password);
+diff --git a/libfreerdp/common/settings_str.c b/libfreerdp/common/settings_str.c
+index 6fa11c05b..912353c6c 100644
+--- a/libfreerdp/common/settings_str.c
++++ b/libfreerdp/common/settings_str.c
+@@ -333,6 +333,8 @@ static const struct settings_str_entry settings_map[] = {
+ 	{ FreeRDP_KerberosRealm, 7, "FreeRDP_KerberosRealm" },
+ 	{ FreeRDP_KeyboardRemappingList, 7, "FreeRDP_KeyboardRemappingList" },
+ 	{ FreeRDP_NtlmSamFile, 7, "FreeRDP_NtlmSamFile" },
++	{ FreeRDP_OnConnectScript, 7, "FreeRDP_OnConnectScript" },
++	{ FreeRDP_OnDisconnectScript, 7, "FreeRDP_OnDisconnectScript" },
+ 	{ FreeRDP_Password, 7, "FreeRDP_Password" },
+ 	{ FreeRDP_PasswordHash, 7, "FreeRDP_PasswordHash" },
+ 	{ FreeRDP_PlayRemoteFxFile, 7, "FreeRDP_PlayRemoteFxFile" },
+diff --git a/server/shadow/freerdp-shadow-cli.1.in b/server/shadow/freerdp-shadow-cli.1.in
+index 9c6ffe543..e018cccb0 100644
+--- a/server/shadow/freerdp-shadow-cli.1.in
++++ b/server/shadow/freerdp-shadow-cli.1.in
+@@ -20,6 +20,8 @@ freerdp\-shadow\-cli \- A utility for sharing a X display via RDP.
+ [\fB-sec-nla\fP]
+ [\fB-sec-ext\fP]
+ [\fB/sam-file:\fP\fI<file>\fP]
++[\fB/on-connect:\fP\fI<script>\fP]
++[\fB/on-disconnect:\fP\fI<script>\fP]
+ [\fB/version\fP]
+ [\fB/help\fP]
+ .SH DESCRIPTION
+@@ -59,6 +59,10 @@ Disable NLA protocol security (default:on)
+ Use NLA extended protocol security (default:off)
+ .IP /sam-file:<file>
+ NTLM SAM file for NLA authentication
++.IP /on-connect:<script>
++Name of script executed after new connect established
++.IP /on-disconnect:<script>
++Name of script executed after disconnect
+ .IP /version
+ Print the version and exit.
+ .IP /help
+diff --git a/server/shadow/shadow_client.c b/server/shadow/shadow_client.c
+index 0a1519ba2..8a455d6fc 100644
+--- a/server/shadow/shadow_client.c
++++ b/server/shadow/shadow_client.c
+@@ -368,6 +368,15 @@ static BOOL shadow_client_post_connect(freerdp_peer* peer)
+ 		return subsystem->ClientConnect(subsystem, client);
+ 	}
+ 
++	WLog_WARN(TAG, "CONNECT [run]");
++	/* Run connection start hook */
++	rdpSettings* ssettings = server->settings;
++	if (ssettings->OnConnectScript)
++	{
++		WLog_WARN(TAG, "CONNECT [run %s]", ssettings->OnConnectScript);
++		int status = system(ssettings->OnConnectScript);
++	}
++
+ 	return TRUE;
+ }
+ 
+@@ -1907,6 +1916,14 @@ fail:
+ 		UpdateSubscriber = NULL;
+ 	}
+ 
++	WLog_WARN(TAG, "DISCONNECT [run]");
++	/* Run connection stop hook */
++	rdpSettings* ssettings = server->settings;
++	if (ssettings->OnDisconnectScript)
++	{
++		WLog_WARN(TAG, "DISCONNECT [run %s]", ssettings->OnDisconnectScript);
++		int status = system(ssettings->OnDisconnectScript);
++	}
+ 	if (peer->connected && subsystem->ClientDisconnect)
+ 	{
+ 		subsystem->ClientDisconnect(subsystem, client);
+diff --git a/server/shadow/shadow_server.c b/server/shadow/shadow_server.c
+index 649724206..837d8c552 100644
+--- a/server/shadow/shadow_server.c
++++ b/server/shadow/shadow_server.c
+@@ -77,6 +77,10 @@ static const COMMAND_LINE_ARGUMENT_A shadow_args[] = {
+ 	  "nla extended protocol security" },
+ 	{ "sam-file", COMMAND_LINE_VALUE_REQUIRED, "<file>", NULL, NULL, -1, NULL,
+ 	  "NTLM SAM file for NLA authentication" },
++	{ "on-connect", COMMAND_LINE_VALUE_REQUIRED, "<script>", NULL, NULL, -1, NULL,
++	  "Name of script executed after new connect established" },
++	{ "on-disconnect", COMMAND_LINE_VALUE_REQUIRED, "<script>", NULL, NULL, -1, NULL,
++	  "Name of script executed after disconnect" },
+ 	{ "version", COMMAND_LINE_VALUE_FLAG | COMMAND_LINE_PRINT_VERSION, NULL, NULL, NULL, -1, NULL,
+ 	  "Print version" },
+ 	{ "buildconfig", COMMAND_LINE_VALUE_FLAG | COMMAND_LINE_PRINT_BUILDCONFIG, NULL, NULL, NULL, -1,
+@@ -392,6 +396,14 @@ int shadow_server_parse_command_line(rdpShadowServer* server, int argc, char** a
+ 		{
+ 			freerdp_settings_set_string(settings, FreeRDP_NtlmSamFile, arg->Value);
+ 		}
++		CommandLineSwitchCase(arg, "on-connect")
++		{
++			freerdp_settings_set_string(settings, FreeRDP_OnConnectScript, arg->Value);
++		}
++		CommandLineSwitchCase(arg, "on-disconnect")
++		{
++			freerdp_settings_set_string(settings, FreeRDP_OnDisconnectScript, arg->Value);
++		}
+ 		CommandLineSwitchDefault(arg)
+ 		{
+ 		}

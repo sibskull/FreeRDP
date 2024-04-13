@@ -19,6 +19,7 @@ Packager: Andrey Cherepanov <cas@altlinux.org>
 Source: %name-%version.tar
 Source1: freerdp-server.service
 Patch0: %name-alt-pam-check.patch
+Patch1: %name-alt-connection-scripts.patch
 Patch2000: %name-e2k.patch
 
 Requires: xfreerdp = %EVR
@@ -206,6 +207,7 @@ the RDP protocol.
 %prep
 %setup
 %patch0 -p1
+%patch1 -p1
 %ifarch %e2k
 %patch2000 -p1
 %endif
