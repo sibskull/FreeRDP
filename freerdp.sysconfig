@@ -1,0 +1,3 @@
+# Block monitors and input devices upon connection
+#FREERDP_SERVER_ARGS="/on-connect:/etc/freerdp/freerdp-login.sh /on-disconnect:/etc/freerdp/freerdp-logout.sh"
+FREERDP_SERVER_ARGS=""

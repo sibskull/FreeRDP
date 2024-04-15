@@ -3,7 +3,8 @@ Description=Remote access to desktop via RDP
 PartOf=graphical-session.target
 
 [Service]
-ExecStart=/usr/bin/freerdp-shadow-cli
+EnvironmentFile=-/etc/sysconfig/freerdp-server
+ExecStart=/usr/bin/freerdp-shadow-cli $FREERDP_SERVER_ARGS
 
 [Install]
 WantedBy=graphical-session.target
