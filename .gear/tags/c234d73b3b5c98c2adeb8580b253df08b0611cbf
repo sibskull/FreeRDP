@@ -1,0 +1,13 @@
+object 7f6cc93c21d7f0faad6daacca06f494f29ce882c
+type commit
+tag 2.11.7
+tagger akallabeth <akallabeth@posteo.net> 1713778025 +0200
+
+release 2.11.7
+-----BEGIN PGP SIGNATURE-----
+
+iHUEABYIAB0WIQR3A7MzQg4K75letLOklFSj/JCf1QUCZiYtbwAKCRCklFSj/JCf
+1WlWAQC7tcxPxhjFMne+6jdjIY8SWw2i80E6riDDL1IZsYWAHgEAtRxwS1T0YfeC
+hu9q3pwNW6YITSjaKumbuphRpYL2eQM=
+=4/Li
+-----END PGP SIGNATURE-----
