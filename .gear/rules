@@ -1,5 +1,6 @@
 tar: @version@:.
 copy: *.patch
 copy: *.service
+copy: *.pam
 copy: *.sh
 copy: *.sysconfig

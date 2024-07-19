@@ -1,0 +1,13 @@
+diff --git a/server/shadow/X11/x11_shadow.c b/server/shadow/X11/x11_shadow.c
+index e6a67b15d..72f8fa395 100644
+--- a/server/shadow/X11/x11_shadow.c
++++ b/server/shadow/X11/x11_shadow.c
+@@ -132,7 +132,7 @@ static BOOL x11_shadow_pam_get_service_name(SHADOW_PAM_AUTH_INFO* info)
+ {
+ 	size_t x;
+ 	const char* base = "/etc/pam.d";
+-	const char* hints[] = { "lightdm", "gdm", "xdm", "login", "sshd" };
++	const char* hints[] = { "freerdp-server", "lightdm", "gdm", "xdm", "login", "sshd" };
+ 
+ 	for (x = 0; x < ARRAYSIZE(hints); x++)
+ 	{
